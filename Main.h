@@ -17,7 +17,7 @@
 // Feats: expandable RAM/ROM module
 
 // Custom Z80 cpu
-const bool printLess = true;
+const bool printLess = false;
 typedef struct lr35902 {
 	// uint8_t a, b, c, d, e, h, l;	// 8-bit general purpose registers
 	uint8_t reg[8];

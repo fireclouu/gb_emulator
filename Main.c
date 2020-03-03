@@ -288,7 +288,8 @@ static void cpu_regs_init(CPU *cpu) {
 // TODO: watch this as some gb games will exceed 0x8000
 void allocateMemory() {
 	// allocate how much space pointer array need
-	memory = malloc(MEMORY_SIZE);
+	// 65536 bytes
+	memory = malloc(MEMORY_SIZE * sizeof(uint8_t));
 	// reset array
 	memset(memory, 0, MEMORY_SIZE);
 }
