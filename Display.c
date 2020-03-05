@@ -38,10 +38,9 @@ bool initWin() {
             return -1;
         }
     }
-  
-    //SDL_SetRenderDrawColor(gRenderer, 0xff, 0xff, 0xff, 255);
-    //SDL_RenderClear(gRenderer);
-    //SDL_RenderPresent(gRenderer);
+
+    // enlarge pixel area
+    SDL_RenderSetScale(gRenderer, 2, 2);
     return 0;
 }
 

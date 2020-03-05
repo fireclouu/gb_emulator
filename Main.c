@@ -4,7 +4,7 @@
 CPU z80;
 CPU *cpu = &z80;
 
-bool PRINT_LESS = true;
+bool PRINT_LESS = false;
 
 static inline void PUSH(CPU *a1, const uint16_t a2);
 
@@ -121,7 +121,9 @@ static inline void DEC(uint8_t* reg) {
 	cpu->ne = 1;
 	cpu->hf = (*reg & 0xf) >= 1;
 }
-
+static inline uint16_t POP(CPU *cpu) {
+    return (memory[cpu->sp++] | (memory[cpu->sp++] << 8));
+}
 // verified
 static inline void PUSH(CPU *cpu, const uint16_t val) {
 	memory[--cpu->sp] = val & 0xff00 >> 8;
@@ -137,7 +139,7 @@ static inline void XOR(CPU *cpu, uint8_t val) {
 	cpu->ne = cpu->hf = cpu->cy = 0; 
 }
 // conditional jumps
-static inline void cond_JP(CPU *cpu, const bool cond, int16_t data) {
+static inline void cond_JP(CPU *cpu, const bool cond, int8_t data) {
 	if (cond) cpu->pc = (cpu->pc + data);
 }
 // interrupts
@@ -186,6 +188,12 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0xfe:
 			CP(cpu, read_next_byte(cpu));
 			break;
+
+        // Stack Pointers
+        case 0x31:
+            cpu->sp = read_next_word(cpu);
+            break; // LD SP, d16
+
 			/*
 		case 0x39:
 			cpu->hf = ((get_pair_hl(cpu) & 0xfff) + (cpu->sp & 0xfff)) & 0xf000;
@@ -258,6 +266,22 @@ static inline int cpu_exec(CPU *cpu) {
 			printf("Opcode %02x not implemented!\n", op);
 			active = 0;
 			return -1;
+
+        // new op
+        case 0x18:
+            cond_JP(cpu, true, read_next_byte(cpu));
+            break;
+        case 0xcd:
+            PUSH(cpu, cpu->pc);
+            cpu->pc = read_next_word(cpu);
+            break; // CALL d16
+        case 0xea:
+            // LS first
+            memory[read_next_word(cpu)] = cpu->reg[REG_A];
+            break; // LD (a16), A
+        case 0xc9:
+            cpu->pc = POP(cpu);
+            break;
 	}
 
 	// service
@@ -298,7 +322,7 @@ void allocateMemory() {
 
 int main(int argc, char** argv) {
 	allocateMemory();
-	loadFile("tetris.gb", 0);
+	loadFile("cpu_instrs.gb", 0);
 
 	// File check, can be removed after
 	// TODO: to.check it, get the length of memory array and print it
@@ -324,7 +348,7 @@ int main(int argc, char** argv) {
 				memory[cpu->pc], memory[cpu->pc + 1], memory[cpu->pc + 2], 
 				memory[cpu->pc + 3], CPU_INST[memory[cpu->pc]]);
 		}
-		
+
 		cpu_exec(cpu);
         setDisplay(memory);
 	}
