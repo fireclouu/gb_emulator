@@ -4,6 +4,8 @@
 CPU z80;
 CPU *cpu = &z80;
 
+bool PRINT_LESS = true;
+
 static inline void PUSH(CPU *a1, const uint16_t a2);
 
 uint8_t *memory;
@@ -73,29 +75,29 @@ static inline uint8_t get_psw(const CPU *cpu) {
 		cpu-> hf << 5 | cpu->cy << 4;
 }
 static inline uint16_t get_pair_bc(const CPU *cpu) {
-	return cpu->reg[b] << 8 | cpu->reg[c];
+	return cpu->reg[REG_B] << 8 | cpu->reg[REG_C];
 }
 static inline uint16_t get_pair_de(const CPU *cpu) {
-	return cpu->reg[d] << 8 | cpu->reg[e];
+	return cpu->reg[REG_D] << 8 | cpu->reg[REG_E];
 }
 
 static inline uint16_t get_pair_hl(const CPU *cpu) {
-	return cpu->reg[h] << 8 | cpu->reg[l];
+	return cpu->reg[REG_H] << 8 | cpu->reg[REG_L];
 }
 static inline uint16_t get_pair_af(const CPU *cpu) {
-	return cpu->reg[a] << 8  | get_psw(cpu);
+	return cpu->reg[REG_A] << 8  | get_psw(cpu);
 }
 static inline void set_pair_bc(CPU *cpu, uint16_t val) {
-	cpu->reg[b] = (val >> 8);
-	cpu->reg[c] = val;
+	cpu->reg[REG_B] = (val >> 8);
+	cpu->reg[REG_C] = val;
 }
 static inline void set_pair_de(CPU *cpu, uint16_t val) {
-	cpu->reg[d] = (val >> 8);
-	cpu->reg[e] = val;
+	cpu->reg[REG_D] = (val >> 8);
+	cpu->reg[REG_E] = val;
 }
 static inline void set_pair_hl(CPU *cpu, uint16_t val) {
-	cpu->reg[h] = (val >> 8);
-	cpu->reg[l] = val;
+	cpu->reg[REG_H] = (val >> 8);
+	cpu->reg[REG_L] = val;
 }
 // Flags
 
@@ -108,9 +110,9 @@ static inline void CALL(CPU *cpu, const uint16_t addr) {
 	cpu->pc = addr;
 }
 static inline void CP(CPU *cpu, const uint8_t val) {
-	cpu->ze = (cpu->reg[a] == val);
+	cpu->ze = (cpu->reg[REG_A] == val);
 	cpu->ne = 1;
-	cpu->hf = (cpu->reg[a] & 0xf) >= (val & 0xf);
+	cpu->hf = (cpu->reg[REG_A] & 0xf) >= (val & 0xf);
 }
 // 8 bit
 static inline void DEC(uint8_t* reg) {
@@ -130,8 +132,8 @@ static inline void RST(CPU *cpu, const int val) {
 	cpu->pc = val;
 }
 static inline void XOR(CPU *cpu, uint8_t val) {
-	cpu->reg[a] ^= val;
-	cpu->ze = !cpu->reg[a];
+	cpu->reg[REG_A] ^= val;
+	cpu->ze = !cpu->reg[REG_A];
 	cpu->ne = cpu->hf = cpu->cy = 0; 
 }
 // conditional jumps
@@ -166,16 +168,16 @@ static inline int cpu_exec(CPU *cpu) {
 			break;
 		// LD (HL-), A
 		case 0x32:
-			memory[get_pair_hl(cpu)] = cpu->reg[a];
+			memory[get_pair_hl(cpu)] = cpu->reg[REG_A];
 			set_pair_hl(cpu, get_pair_hl(cpu) - 1);
 			break;
 		// LDH (a8), A
 		case 0xe0:
-			memory[0xff << 8 | read_next_byte(cpu)] = cpu->reg[a];
+			memory[0xff << 8 | read_next_byte(cpu)] = cpu->reg[REG_A];
 			break;
 		// LDH A, (a8)
 		case 0xf0:
-			cpu->reg[a] = memory[0xff << 8 | read_next_byte(cpu)];
+			cpu->reg[REG_A] = memory[0xff << 8 | read_next_byte(cpu)];
 			break;
 		// CP regs
 		case 0xb8: case 0xb9: case 0xba: case 0xbb: case 0xbc: case 0xbd: case 0xbf:
@@ -266,13 +268,13 @@ static inline int cpu_exec(CPU *cpu) {
 
 static void cpu_regs_init(CPU *cpu) {
 
-	cpu->reg[a] = 0;
-	cpu->reg[b] = 0;
-	cpu->reg[c] = 0;	
-	cpu->reg[d] = 0;
-	cpu->reg[e] = 0;
-	cpu->reg[h] = 0;
-	cpu->reg[l] = 0;
+	cpu->reg[REG_A] = 0;
+	cpu->reg[REG_B] = 0;
+	cpu->reg[REG_C] = 0;	
+	cpu->reg[REG_D] = 0;
+	cpu->reg[REG_E] = 0;
+	cpu->reg[REG_H] = 0;
+	cpu->reg[REG_L] = 0;
 	
 	cpu->pc = 0;
 	cpu->sp = 0;
@@ -294,7 +296,7 @@ void allocateMemory() {
 	memset(memory, 0, MEMORY_SIZE);
 }
 
-int main() {
+int main(int argc, char** argv) {
 	allocateMemory();
 	loadFile("tetris.gb", 0);
 
@@ -307,8 +309,13 @@ int main() {
 	// 0x100 starting address	
 	cpu->pc = 0x0100;
 
+    // DISPLAY
+    if (initWin() != 0) {
+        return -1;
+    }
+
 	while(active) {
-		if (printLess) {
+		if (PRINT_LESS) {
 			printf("%04x %s\n", cpu->pc, CPU_INST[memory[cpu->pc]]);
 		} else {
 			printf("PC: %04x (%02x) | SP: %04x | AF: %04x | BC: %04x | DE: %04x | HL: %04x ( %02x %02x %02x %02x ) (%s)\n",

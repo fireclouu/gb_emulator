@@ -1,0 +1,11 @@
+- Display will be handled by SDL
+    - per pixel
+    - vram starts at 8000H, ends in 9fffH
+
+Plan:
+    - fetch d16 (word)
+        example: FF 00
+
+    - pixel position are determined by bits, and memory address location
+    - color will be determined by high and low significant byte's bit (xs >> pos & 1 [where x = high or low byte])
+    - new scanline every vram+0x1f

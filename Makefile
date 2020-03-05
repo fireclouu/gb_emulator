@@ -1,12 +1,12 @@
-CC=gcc
-CFLAGS=-I.
+CC = gcc
+CFLAGS = -I. -lSDL2
 DEPS = Main.h
-
+OBJ = Main.o Display.o
 %.o: %.c $(DEPS)
-	$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $@ $< -I.
 
-gbemu: Main.o
-	$(CC) -o gbemu Main.c $(CFLAGS)
+gbemu: $(OBJ)
+	$(CC) -o gbemu $^ $(CFLAGS)
 
 clean:
 	rm *.o

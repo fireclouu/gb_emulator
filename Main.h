@@ -2,13 +2,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#define a 7
-#define b 0
-#define c 1
-#define d 2
-#define e 3
-#define h 4
-#define l 5
+#define NAME "gbemu"
 #define MEMORY_SIZE 0x10000
 
 // GameBoy
@@ -17,7 +11,13 @@
 // Feats: expandable RAM/ROM module
 
 // Custom Z80 cpu
-const bool printLess = false;
+enum REG_ID {
+    REG_B, REG_C,
+    REG_D, REG_E,
+    REG_H, REG_L,
+    REG_FILLER, REG_A
+};
+
 typedef struct lr35902 {
 	// uint8_t a, b, c, d, e, h, l;	// 8-bit general purpose registers
 	uint8_t reg[8];
@@ -25,3 +25,7 @@ typedef struct lr35902 {
 	bool ze, ne, hf, cy;		// flags, pos: znhc0000 (as reg. F / psw)
 	bool sw_interrupt;		// interrupt
 } CPU;
+
+// Display
+bool initWin();
+void closeWin();
