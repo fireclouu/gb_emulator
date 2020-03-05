@@ -29,3 +29,4 @@ typedef struct lr35902 {
 // Display
 bool initWin();
 void closeWin();
+void setDisplay(const uint8_t*);

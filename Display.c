@@ -2,9 +2,16 @@
 #include <SDL2/SDL.h>
 #define WIDTH 640
 #define HEIGHT 480
+#define GB_SCR_W 160
+#define GB_SCR_H 144
+#define VRAM 0x8000
 
-SDL_Window* gWindow;
-SDL_Renderer* gRenderer;
+enum RENDERERS {
+    TRANSPARENT, WGRAY, SGRAY, DARK, RENDERER_COUNT
+};
+
+SDL_Window *gWindow;
+SDL_Renderer *gRenderer;
 
 bool initWin() {
     if ( SDL_Init(SDL_INIT_VIDEO) > 0 ) 
@@ -27,15 +34,39 @@ bool initWin() {
         gRenderer = SDL_CreateRenderer(gWindow, -1, SDL_RENDERER_SOFTWARE);
         if (gRenderer == NULL) 
         {
-            printf("Cannot create renderer! %s", SDL_GetError());
+            printf("Cannot create renderer! %s",  SDL_GetError());
             return -1;
         }
     }
-
-    SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
-    SDL_RenderClear(gRenderer);
-    SDL_RenderPresent(gRenderer);
+  
+    //SDL_SetRenderDrawColor(gRenderer, 0xff, 0xff, 0xff, 255);
+    //SDL_RenderClear(gRenderer);
+    //SDL_RenderPresent(gRenderer);
     return 0;
+}
+
+void plotPoints(const int x, const int y, const uint8_t color) {
+    switch (color)
+    {
+        // transparent can be skipped
+        case TRANSPARENT:
+            SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255); // placeholder only
+            break;
+        case WGRAY:
+            SDL_SetRenderDrawColor(gRenderer, 170, 170, 170, 255);
+            break;
+        case SGRAY:
+            SDL_SetRenderDrawColor(gRenderer, 85, 85, 85, 255);
+            break;
+        case DARK:
+            SDL_SetRenderDrawColor(gRenderer, 0, 0, 0, 255);
+            break;
+        default:
+            printf("%d: cannot place this pixel", color);
+            break;
+    }
+
+    SDL_RenderDrawPoint(gRenderer, x, y);
 }
 
 void closeWin() {
@@ -43,10 +74,32 @@ void closeWin() {
     SDL_Quit();
 }
 
-static inline void get_display(const uint8_t* memory, const uint16_t addr) {
-	// msb , lsb
-}
-
 static inline uint8_t proc_color(const uint8_t hNib, const uint8_t lNib, const uint8_t pos) {
 	return ( ( (lNib >> pos) & 0x1) | (( (hNib >> pos) & 0x1   ) << 1));
 }
+
+void setDisplay(const uint8_t* memory) {
+	// clear Window
+    SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
+    SDL_RenderClear(gRenderer);
+
+    int read = VRAM;
+
+    for ( int y = 0; y <= GB_SCR_H; y++ ) 
+    {
+        for ( int x = 0; x <= GB_SCR_W; x+=8 ) 
+        {
+            for (int bitpos = 0; bitpos < 8; bitpos++) 
+            {
+                int color = proc_color(memory[read], memory[read + 1], bitpos);
+                plotPoints(x + bitpos, y, color);
+            }
+
+            read += 2;
+        }
+    }
+
+    SDL_RenderPresent(gRenderer);
+}
+
+

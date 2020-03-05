@@ -326,6 +326,7 @@ int main(int argc, char** argv) {
 		}
 		
 		cpu_exec(cpu);
+        setDisplay(memory);
 	}
 
 	printf("\nPROGRAM END\n\n");
