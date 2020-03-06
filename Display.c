@@ -89,7 +89,7 @@ void setDisplay(const uint8_t* memory) {
     {
         for ( int x = 0; x <= GB_SCR_W; x+=8 ) 
         {
-            for (int bitpos = 7; bitpos <= 0; bitpos--) 
+            for (int bitpos = 7; bitpos >= 0; bitpos--) 
             {
                 int color = proc_color(memory[read], memory[read + 1], bitpos);
                 plotPoints(x + bitpos, y, color);
