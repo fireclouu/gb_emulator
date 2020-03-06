@@ -25,7 +25,13 @@ typedef struct lr35902 {
         struct {
             union {
                 struct {
-                    uint8_t f;
+                    struct {
+                        uint8_t filler : 4;
+                        uint8_t cy : 1;
+                        uint8_t hf : 1;
+                        uint8_t ne : 1; 
+                        uint8_t ze : 1; // flags, pos: znhc0000 (as reg. F / psw)	
+                    } flags;
                     uint8_t a;
                 };
                 uint16_t af;
@@ -67,8 +73,7 @@ typedef struct lr35902 {
 	uint8_t *reg[8];
 
     uint16_t pc, sp;  // 16-bit register address6
-	bool ze : 1, ne : 1, hf : 1, cy : 1;	// flags, pos: znhc0000 (as reg. F / psw)
-	bool sw_interrupt : 1;		// interrupt
+    bool sw_interrupt : 1;		// interrupt
 } CPU;
 
 // Display

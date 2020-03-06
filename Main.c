@@ -10,6 +10,8 @@ static inline void PUSH(CPU *a1, const uint16_t a2);
 uint8_t *memory;
 size_t file_size;
 size_t memory_size; // store memory size
+uint8_t holdByte;
+uint16_t holdWord;
 
 bool active;
 
@@ -31,16 +33,24 @@ static inline void CALL(CPU *cpu, const uint16_t addr) {
 	cpu->pc = addr;
 }
 static inline void CP(CPU *cpu, const uint8_t val) {
-	cpu->ze = (*cpu->reg[REG_A] == val);
-	cpu->ne = 1;
-	cpu->hf = (*cpu->reg[REG_A] & 0xf) >= (val & 0xf);
+	cpu->registers.flags.ze = (*cpu->reg[REG_A] == val);
+	cpu->registers.flags.ne = 1;
+	cpu->registers.flags.hf = (*cpu->reg[REG_A] & 0xf) >= (val & 0xf);
 }
-// 8 bit
 static inline void DEC(uint8_t* reg) {
-	*reg = *reg - 1;
-	cpu->ze = !(*reg);
-	cpu->ne = 1;
-	cpu->hf = (uint8_t) ((*reg & 0xf) - 1) > 0xf;
+	holdByte = *reg - 1;
+	cpu->registers.flags.ze = !(holdByte);
+	cpu->registers.flags.ne = 1;
+	cpu->registers.flags.hf = (uint8_t) ((*reg & 0xf) - 1) > 0xf;
+
+    (*reg)--;
+}
+static inline void INC(uint8_t* reg) {
+    holdByte = *reg + 1;
+    cpu->registers.flags.ze = !(holdByte);
+    cpu->registers.flags.ne = 0;
+    cpu->registers.flags.hf = (uint8_t) ((*reg & 0xf) + 1) > 0xf;
+    (*reg)++;
 }
 static inline uint16_t POP(CPU *cpu) {
     return (memory[cpu->sp++] | (memory[cpu->sp++] << 8));
@@ -48,17 +58,15 @@ static inline uint16_t POP(CPU *cpu) {
 static inline void PUSH(CPU *cpu, const uint16_t val) {
 	memory[--cpu->sp] = val >> 8;
 	memory[--cpu->sp] = val;
-    //printf("\n\nstored value: n: %x n+1: %x\n", memory[cpu->sp], memory[cpu->sp + 1]);
 }
 static inline void RST(CPU *cpu, const int val) {
 	PUSH(cpu, cpu->pc);
 	cpu->pc = val;
 }
 static inline void XOR(CPU *cpu, uint8_t val) {
-    printf("%d\n", val);
-	*(cpu->reg[REG_A]) ^= val;
-	cpu->ze = !(*cpu->reg[REG_A]);
-	cpu->ne = cpu->hf = cpu->cy = 0; 
+	*cpu->reg[REG_A] ^= val;
+	cpu->registers.flags.ze = !(*cpu->reg[REG_A]);
+	cpu->registers.flags.ne = cpu->registers.flags.hf = cpu->registers.flags.cy = 0; 
 }
 // conditional jumps
 static inline void cond_JP(CPU *cpu, const bool cond, const int8_t data) {
@@ -82,6 +90,10 @@ static inline int cpu_exec(CPU *cpu) {
 
 	switch(op) 
 	{
+        // INC regs
+        case 0x04: case 0x0c: case 0x14: case 0x1c: case 0x24: case 0x2c: case 0x3c:
+            INC(cpu->reg[(op & 0x38) >> 3]);
+            break;
 		// DEC regs
 		case 0x05: case 0x0d: case 0x15: case 0x1d: case 0x25: case 0x2d: case 0x3d:
 			DEC(cpu->reg[(op & 0x38) >> 3]);
@@ -100,10 +112,10 @@ static inline int cpu_exec(CPU *cpu) {
 
 		/*
 		case 0x39:
-			cpu->hf = ((get_pair_hl(cpu) & 0xfff) + (cpu->sp & 0xfff)) & 0xf000;
-			cpu->cy = (get_pair_hl(cpu) + cpu->sp) >> 16;
+			cpu->registers.flags.hf = ((get_pair_hl(cpu) & 0xfff) + (cpu->sp & 0xfff)) & 0xf000;
+			cpu->registers.flags.cy = (get_pair_hl(cpu) + cpu->sp) >> 16;
 			set_pair_hl(cpu, get_pair_hl(cpu) + cpu->sp);
-			cpu->ne = 0;
+			cpu->registers.flags.ne = 0;
 			break; // ADD HL, SP
 		case 0x3b: cpu->sp--; break; // DEC SP
         */
@@ -114,7 +126,7 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0xe5: PUSH(cpu, cpu->registers.hl); break;
 		case 0xf5: PUSH(cpu, cpu->registers.af); break;
 		// Address Jumps
-		case 0x20: cond_JP(cpu, !cpu->ze, (int8_t) read_next_byte(cpu)); break;
+		case 0x20: cond_JP(cpu, !cpu->registers.flags.ze, (int8_t) read_next_byte(cpu)); break;
 		case 0xc3: cpu->pc = read_next_word(cpu); break; // JP d16
 		// Interrupts
 		case 0xf3: swd = 1; break; // DI
@@ -218,10 +230,10 @@ static void cpu_regs_init(CPU *cpu) {
 	cpu->pc = 0;
 	cpu->sp = 0;
 
-	cpu->ze = 0;
-	cpu->ne = 0;
-	cpu->hf = 0;
-	cpu->cy = 0;
+	cpu->registers.flags.ze = 0;
+	cpu->registers.flags.ne = 0;
+	cpu->registers.flags.hf = 0;
+	cpu->registers.flags.cy = 0;
 	
 }
 
@@ -267,7 +279,7 @@ int loadFile(const char *fname, size_t addr) {
 int main(int argc, char** argv) {
 	allocateMemory();
     cpu_regs_init(cpu);
-	loadFile("tetris.gb", 0);
+	loadFile("cpu_instrs.gb", 0);
 
 	// File check, can be removed after
 	// TODO: to.check it, get the length of memory array and print it
@@ -279,24 +291,29 @@ int main(int argc, char** argv) {
 	cpu->pc = 0;
 
     // DISPLAY
-    /*
     if (initWin() != 0) {
         return -1;
     }
-    */
+
 	while(active) {
 		if (PRINT_LESS) {
 			printf("%04x %s\n", cpu->pc, CPU_INST[memory[cpu->pc]]);
 		} else {
 			printf("PC: %04x (%02x) | SP: %04x | AF: %04x | BC: %04x | DE: %04x | HL: %04x ( %02x %02x %02x %02x ) %s\n",
-				cpu->pc, memory[cpu->pc], cpu->sp, cpu->registers.af, 
-				cpu->registers.bc, cpu->registers.de, cpu->registers.hl, 
-				memory[cpu->pc], memory[cpu->pc + 1], memory[cpu->pc + 2], 
-				memory[cpu->pc + 3], CPU_INST[memory[cpu->pc]]);
+                // 16 bit registers
+				cpu->pc, memory[cpu->pc], cpu->sp,
+                // register pairs
+                cpu->registers.af, cpu->registers.bc,
+                cpu->registers.de, cpu->registers.hl, 
+                // peek
+				memory[cpu->pc],     memory[cpu->pc + 1],
+                memory[cpu->pc + 2], memory[cpu->pc + 3],
+                // instruction
+                CPU_INST[memory[cpu->pc]]);
 		}
 
 		cpu_exec(cpu);
-       // setDisplay(memory);
+        setDisplay(memory);
 	}
 
 	printf("\nPROGRAM END\n\n");
