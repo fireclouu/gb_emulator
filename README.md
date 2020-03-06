@@ -1,1 +1,2 @@
-# gb_emulator
+# GameBoy emulator
+Written in C

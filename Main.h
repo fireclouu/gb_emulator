@@ -19,11 +19,10 @@ enum REG_ID {
 };
 
 typedef struct lr35902 {
-	// uint8_t a, b, c, d, e, h, l;	// 8-bit general purpose registers
 	uint8_t reg[8];
-	uint16_t pc, sp;		// 16-bit register address
-	bool ze, ne, hf, cy;		// flags, pos: znhc0000 (as reg. F / psw)
-	bool sw_interrupt;		// interrupt
+    uint16_t pc, sp;  // 16-bit register address6
+	bool ze : 1, ne : 1, hf : 1, cy : 1;	// flags, pos: znhc0000 (as reg. F / psw)
+	bool sw_interrupt : 1;		// interrupt
 } CPU;
 
 // Display

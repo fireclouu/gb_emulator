@@ -77,6 +77,7 @@ static inline uint8_t proc_color(const uint8_t hNib, const uint8_t lNib, const u
 	return ( ( (lNib >> pos) & 0x1) | (( (hNib >> pos) & 0x1   ) << 1));
 }
 
+// 0x8000 - 0x9ffff (Read)
 void setDisplay(const uint8_t* memory) {
 	// clear Window
     SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);

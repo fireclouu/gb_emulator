@@ -4,69 +4,20 @@
 CPU z80;
 CPU *cpu = &z80;
 
-bool PRINT_LESS = false;
-
+bool PRINT_LESS = true;
 static inline void PUSH(CPU *a1, const uint16_t a2);
 
 uint8_t *memory;
 size_t file_size;
 size_t memory_size; // store memory size
 
-uint16_t rp; // make as pair pointer
-
 bool active;
 
-// separate this block of code if you learn how to make them link together
-int loadFile(const char *fname, size_t addr) {
-	// open only in read-binary mode
-	FILE *fp = fopen(fname, "rb");
-
-	if (fp == NULL) {
-		fprintf(stderr, "File %s not found!", fname);
-		return 1;
-	}
-
-	// get its length
-	// arg explanation
-	// arg 1: what file to seek
-	// arg 2: move the cursor
-	// arg 3: where to start
-	fseek(fp, 0, SEEK_END);
-
-	// size_t is convenience for largest integer data type available
-	file_size = ftell(fp);
-
-	// place cursor at the beginning
-	// convenient than fseek(fp, 0, SEEK_SET)
-	rewind(fp);
-
-	// read file
-	// offset memory to given address before loading 1byte integer data of a file
-	// returns value of last cursor of succeeding reads of file
-	
-	// args explantion
-	// arg 1: where to store buffer
-	// arg 2: how much bytes to read in buffer (usually 1 byte or 0xff)
-	// arg 3: how much memory to read and load (1 byte * SEEK_END)
-	// arg 4: what file to stream (read)
-	memory_size = fread(&memory[addr], sizeof(uint8_t), file_size, fp);
-
-	// close file buffer to save memory
-	fclose(fp);
-
-	// no errors within this point
-	return 0;
-}
-
-// needs optimization
 static inline uint16_t read_next_word(CPU *cpu) {
-	cpu->pc += 2;
-	return memory[cpu->pc - 1] << 8 | memory[cpu->pc - 2];
+	return memory[cpu->pc++] | (memory[cpu->pc++] << 8);
 }
-
 static inline uint8_t read_next_byte(CPU *cpu) {
-	cpu->pc++;
-	return memory[cpu->pc - 1];
+	return memory[cpu->pc++];
 }
 
 // register pairs and psw
@@ -119,7 +70,7 @@ static inline void DEC(uint8_t* reg) {
 	*reg = *reg - 1;
 	cpu->ze = !(*reg);
 	cpu->ne = 1;
-	cpu->hf = (*reg & 0xf) >= 1;
+	cpu->hf = (uint8_t) ((*reg & 0xf) - 1) > 0xf;
 }
 static inline uint16_t POP(CPU *cpu) {
     return (memory[cpu->sp++] | (memory[cpu->sp++] << 8));
@@ -139,7 +90,7 @@ static inline void XOR(CPU *cpu, uint8_t val) {
 	cpu->ne = cpu->hf = cpu->cy = 0; 
 }
 // conditional jumps
-static inline void cond_JP(CPU *cpu, const bool cond, int8_t data) {
+static inline void cond_JP(CPU *cpu, const bool cond, const int8_t data) {
 	if (cond) cpu->pc = (cpu->pc + data);
 }
 // interrupts
@@ -168,33 +119,15 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0x06: case 0x0e: case 0x16: case 0x1e: case 0x26: case 0x2e: case 0x3e:
 			cpu->reg[(op & 0x38) >> 3] = read_next_byte(cpu);
 			break;
-		// LD (HL-), A
-		case 0x32:
-			memory[get_pair_hl(cpu)] = cpu->reg[REG_A];
-			set_pair_hl(cpu, get_pair_hl(cpu) - 1);
-			break;
-		// LDH (a8), A
-		case 0xe0:
-			memory[0xff << 8 | read_next_byte(cpu)] = cpu->reg[REG_A];
-			break;
-		// LDH A, (a8)
-		case 0xf0:
-			cpu->reg[REG_A] = memory[0xff << 8 | read_next_byte(cpu)];
-			break;
-		// CP regs
+        // CP regs
 		case 0xb8: case 0xb9: case 0xba: case 0xbb: case 0xbc: case 0xbd: case 0xbf:
 			CP(cpu, cpu->reg[op & 0x7]);
 			break;
 		case 0xfe:
 			CP(cpu, read_next_byte(cpu));
-			break;
+			break; // CP d8
 
-        // Stack Pointers
-        case 0x31:
-            cpu->sp = read_next_word(cpu);
-            break; // LD SP, d16
-
-			/*
+		/*
 		case 0x39:
 			cpu->hf = ((get_pair_hl(cpu) & 0xfff) + (cpu->sp & 0xfff)) & 0xf000;
 			cpu->cy = (get_pair_hl(cpu) + cpu->sp) >> 16;
@@ -202,11 +135,13 @@ static inline int cpu_exec(CPU *cpu) {
 			cpu->ne = 0;
 			break; // ADD HL, SP
 		case 0x3b: cpu->sp--; break; // DEC SP
+        */
+
 		// PUSH
 		case 0xc5: PUSH(cpu, get_pair_bc(cpu)); break;
 		case 0xd5: PUSH(cpu, get_pair_de(cpu)); break;
 		case 0xe5: PUSH(cpu, get_pair_hl(cpu)); break;
-		case 0xf5: PUSH(cpu, get_pair_af(cpu)); break;*/
+		case 0xf5: PUSH(cpu, get_pair_af(cpu)); break;
 		// Address Jumps
 		case 0x20: cond_JP(cpu, !cpu->ze, (int8_t) read_next_byte(cpu)); break;
 		case 0xc3: cpu->pc = read_next_word(cpu); break; // JP d16
@@ -229,8 +164,8 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0x21: set_pair_hl(cpu, read_next_word(cpu)); break;
 		// XOR
 		case 0xa8: case 0xa9: case 0xaa: case 0xab: case 0xac: case 0xad: case 0xaf:
-			   XOR(cpu, cpu->reg[op & 0x7]);
-			   break;
+			XOR(cpu, cpu->reg[op & 0x7]);
+			break;
 		// LD (no hl)
 		case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x47:
 		case 0x48: case 0x49: case 0x4a: case 0x4b: case 0x4c: case 0x4d: case 0x4f:
@@ -244,14 +179,12 @@ static inline int cpu_exec(CPU *cpu) {
 
 		// LD r, hl
 		case 0x46: case 0x4e: case 0x56: case 0x5e: case 0x66: case 0x6e: case 0x7e:
-			rp = get_pair_hl(cpu);
-			cpu->reg[op & 0x38] = memory[rp];
+			cpu->reg[op & 0x38] = memory[get_pair_hl(cpu)];
 			break;
 	
 		// LD hl, r
 		case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x77:
-			rp = get_pair_hl(cpu);
-			memory[rp] = cpu->reg[op & 0x7];
+			memory[get_pair_hl(cpu)] = cpu->reg[op & 0x7];
 			break;
 
 		// NOP
@@ -262,26 +195,37 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0xd3: case 0xdb: case 0xdd: case 0xe3: case 0xe4: case 0xeb: case 0xec:
 		case 0xed: case 0xf4: case 0xfc: case 0xfd:
 			return 0;
-		default:
-			printf("Opcode %02x not implemented!\n", op);
-			active = 0;
-			return -1;
 
-        // new op
         case 0x18:
             cond_JP(cpu, true, read_next_byte(cpu));
-            break;
+            break; // JR r8
+        case 0x31:
+            cpu->sp = read_next_word(cpu);
+            break; // LD SP, d16
+		case 0x32:
+			memory[get_pair_hl(cpu)] = cpu->reg[REG_A];
+			set_pair_hl(cpu, get_pair_hl(cpu) - 1);
+			break; // LD (HL-), A	
         case 0xcd:
             PUSH(cpu, cpu->pc);
             cpu->pc = read_next_word(cpu);
             break; // CALL d16
         case 0xea:
-            // LS first
             memory[read_next_word(cpu)] = cpu->reg[REG_A];
             break; // LD (a16), A
         case 0xc9:
             cpu->pc = POP(cpu);
-            break;
+            break; // RET
+		case 0xe0:
+			memory[0xff << 8 | read_next_byte(cpu)] = cpu->reg[REG_A];
+			break; // LDH (a8), A
+		case 0xf0:
+			cpu->reg[REG_A] = memory[0xff << 8 | read_next_byte(cpu)];
+			break; // LDH A, (a8)
+		default:
+			printf("Opcode %02x not implemented!\n", op);
+			active = 0;
+			return -1;
 	}
 
 	// service
@@ -320,9 +264,38 @@ void allocateMemory() {
 	memset(memory, 0, MEMORY_SIZE);
 }
 
+int loadFile(const char *fname, size_t addr) {
+	// open only in read-binary mode
+	FILE *fp = fopen(fname, "rb");
+
+	if (fp == NULL) {
+		fprintf(stderr, "File %s not found!", fname);
+		return 1;
+	}
+
+	fseek(fp, 0, SEEK_END);
+	file_size = ftell(fp);
+	rewind(fp);
+
+	// read file
+	// offset memory to given address before loading 1byte integer data of a file
+	// returns value of last cursor of succeeding reads of file
+	
+	// args explantion
+	// arg 1: where to store buffer
+	// arg 2: how much bytes to read in buffer (usually 1 byte or 0xff)
+	// arg 3: how much memory to read and load (1 byte * SEEK_END)
+	// arg 4: what file to stream (read)
+	memory_size = fread(&memory[addr], sizeof(uint8_t), file_size, fp);
+
+	fclose(fp);
+
+	return 0;
+}
+
 int main(int argc, char** argv) {
 	allocateMemory();
-	loadFile("cpu_instrs.gb", 0);
+	loadFile("cpu_instrs.gb", 0x0);
 
 	// File check, can be removed after
 	// TODO: to.check it, get the length of memory array and print it
@@ -333,7 +306,7 @@ int main(int argc, char** argv) {
 	// 0x100 starting address	
 	cpu->pc = 0x0100;
 
-    // DISPLAY
+    // DISPLAY 
     if (initWin() != 0) {
         return -1;
     }
