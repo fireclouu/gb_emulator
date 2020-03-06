@@ -4,7 +4,7 @@
 CPU z80;
 CPU *cpu = &z80;
 
-bool PRINT_LESS = true;
+bool PRINT_LESS = 0;
 static inline void PUSH(CPU *a1, const uint16_t a2);
 
 uint8_t *memory;
@@ -20,36 +20,6 @@ static inline uint8_t read_next_byte(CPU *cpu) {
 	return memory[cpu->pc++];
 }
 
-// register pairs and psw
-static inline uint8_t get_psw(const CPU *cpu) {
-	return cpu->ze << 7 | cpu->ne << 6 |
-		cpu-> hf << 5 | cpu->cy << 4;
-}
-static inline uint16_t get_pair_bc(const CPU *cpu) {
-	return cpu->reg[REG_B] << 8 | cpu->reg[REG_C];
-}
-static inline uint16_t get_pair_de(const CPU *cpu) {
-	return cpu->reg[REG_D] << 8 | cpu->reg[REG_E];
-}
-
-static inline uint16_t get_pair_hl(const CPU *cpu) {
-	return cpu->reg[REG_H] << 8 | cpu->reg[REG_L];
-}
-static inline uint16_t get_pair_af(const CPU *cpu) {
-	return cpu->reg[REG_A] << 8  | get_psw(cpu);
-}
-static inline void set_pair_bc(CPU *cpu, uint16_t val) {
-	cpu->reg[REG_B] = (val >> 8);
-	cpu->reg[REG_C] = val;
-}
-static inline void set_pair_de(CPU *cpu, uint16_t val) {
-	cpu->reg[REG_D] = (val >> 8);
-	cpu->reg[REG_E] = val;
-}
-static inline void set_pair_hl(CPU *cpu, uint16_t val) {
-	cpu->reg[REG_H] = (val >> 8);
-	cpu->reg[REG_L] = val;
-}
 // Flags
 
 // Instructions
@@ -61,9 +31,9 @@ static inline void CALL(CPU *cpu, const uint16_t addr) {
 	cpu->pc = addr;
 }
 static inline void CP(CPU *cpu, const uint8_t val) {
-	cpu->ze = (cpu->reg[REG_A] == val);
+	cpu->ze = (*cpu->reg[REG_A] == val);
 	cpu->ne = 1;
-	cpu->hf = (cpu->reg[REG_A] & 0xf) >= (val & 0xf);
+	cpu->hf = (*cpu->reg[REG_A] & 0xf) >= (val & 0xf);
 }
 // 8 bit
 static inline void DEC(uint8_t* reg) {
@@ -75,18 +45,19 @@ static inline void DEC(uint8_t* reg) {
 static inline uint16_t POP(CPU *cpu) {
     return (memory[cpu->sp++] | (memory[cpu->sp++] << 8));
 }
-// verified
 static inline void PUSH(CPU *cpu, const uint16_t val) {
-	memory[--cpu->sp] = val & 0xff00 >> 8;
-	memory[--cpu->sp] = val & 0x00ff;
+	memory[--cpu->sp] = val >> 8;
+	memory[--cpu->sp] = val;
+    //printf("\n\nstored value: n: %x n+1: %x\n", memory[cpu->sp], memory[cpu->sp + 1]);
 }
 static inline void RST(CPU *cpu, const int val) {
 	PUSH(cpu, cpu->pc);
 	cpu->pc = val;
 }
 static inline void XOR(CPU *cpu, uint8_t val) {
-	cpu->reg[REG_A] ^= val;
-	cpu->ze = !cpu->reg[REG_A];
+    printf("%d\n", val);
+	*(cpu->reg[REG_A]) ^= val;
+	cpu->ze = !(*cpu->reg[REG_A]);
 	cpu->ne = cpu->hf = cpu->cy = 0; 
 }
 // conditional jumps
@@ -113,15 +84,15 @@ static inline int cpu_exec(CPU *cpu) {
 	{
 		// DEC regs
 		case 0x05: case 0x0d: case 0x15: case 0x1d: case 0x25: case 0x2d: case 0x3d:
-			DEC(&cpu->reg[(op & 0x38) >> 3]);
+			DEC(cpu->reg[(op & 0x38) >> 3]);
 			break;
 		// LD regs, d8
 		case 0x06: case 0x0e: case 0x16: case 0x1e: case 0x26: case 0x2e: case 0x3e:
-			cpu->reg[(op & 0x38) >> 3] = read_next_byte(cpu);
+			(*cpu->reg[(op & 0x38) >> 3]) = read_next_byte(cpu);
 			break;
         // CP regs
 		case 0xb8: case 0xb9: case 0xba: case 0xbb: case 0xbc: case 0xbd: case 0xbf:
-			CP(cpu, cpu->reg[op & 0x7]);
+			CP(cpu, *cpu->reg[op & 0x7]);
 			break;
 		case 0xfe:
 			CP(cpu, read_next_byte(cpu));
@@ -138,10 +109,10 @@ static inline int cpu_exec(CPU *cpu) {
         */
 
 		// PUSH
-		case 0xc5: PUSH(cpu, get_pair_bc(cpu)); break;
-		case 0xd5: PUSH(cpu, get_pair_de(cpu)); break;
-		case 0xe5: PUSH(cpu, get_pair_hl(cpu)); break;
-		case 0xf5: PUSH(cpu, get_pair_af(cpu)); break;
+		case 0xc5: PUSH(cpu, cpu->registers.bc); break;
+		case 0xd5: PUSH(cpu, cpu->registers.de); break;
+		case 0xe5: PUSH(cpu, cpu->registers.hl); break;
+		case 0xf5: PUSH(cpu, cpu->registers.af); break;
 		// Address Jumps
 		case 0x20: cond_JP(cpu, !cpu->ze, (int8_t) read_next_byte(cpu)); break;
 		case 0xc3: cpu->pc = read_next_word(cpu); break; // JP d16
@@ -159,12 +130,12 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0xf7: RST(cpu, 0x30); break;
 		case 0xff: RST(cpu, 0x38); break;*/
 		// LD RP, d16
-		case 0x01: set_pair_bc(cpu, read_next_word(cpu)); break;
-		case 0x11: set_pair_de(cpu, read_next_word(cpu)); break;
-		case 0x21: set_pair_hl(cpu, read_next_word(cpu)); break;
+		case 0x01: cpu->registers.bc = read_next_word(cpu); break;
+		case 0x11: cpu->registers.de = read_next_word(cpu); break;
+		case 0x21: cpu->registers.hl = read_next_word(cpu); break;
 		// XOR
 		case 0xa8: case 0xa9: case 0xaa: case 0xab: case 0xac: case 0xad: case 0xaf:
-			XOR(cpu, cpu->reg[op & 0x7]);
+			XOR(cpu, *cpu->reg[op & 0x7]);
 			break;
 		// LD (no hl)
 		case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x47:
@@ -174,17 +145,17 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x67:
 		case 0x68: case 0x69: case 0x6a: case 0x6b: case 0x6c: case 0x6d: case 0x6f:
 		case 0x78: case 0x79: case 0x7a: case 0x7b: case 0x7c: case 0x7d: case 0x7f:
-			cpu->reg[(op & 0x38) >> 3] = cpu->reg[op & 0x7];
+			*cpu->reg[(op & 0x38) >> 3] = *cpu->reg[op & 0x7];
 			break;
 
 		// LD r, hl
 		case 0x46: case 0x4e: case 0x56: case 0x5e: case 0x66: case 0x6e: case 0x7e:
-			cpu->reg[op & 0x38] = memory[get_pair_hl(cpu)];
+			*cpu->reg[op & 0x38] = memory[cpu->registers.hl];
 			break;
 	
 		// LD hl, r
 		case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x77:
-			memory[get_pair_hl(cpu)] = cpu->reg[op & 0x7];
+			memory[cpu->registers.hl] = *cpu->reg[op & 0x7];
 			break;
 
 		// NOP
@@ -203,24 +174,24 @@ static inline int cpu_exec(CPU *cpu) {
             cpu->sp = read_next_word(cpu);
             break; // LD SP, d16
 		case 0x32:
-			memory[get_pair_hl(cpu)] = cpu->reg[REG_A];
-			set_pair_hl(cpu, get_pair_hl(cpu) - 1);
+			memory[cpu->registers.hl] = *cpu->reg[REG_A];
+            cpu->registers.hl--;
 			break; // LD (HL-), A	
         case 0xcd:
             PUSH(cpu, cpu->pc);
             cpu->pc = read_next_word(cpu);
             break; // CALL d16
         case 0xea:
-            memory[read_next_word(cpu)] = cpu->reg[REG_A];
+            memory[read_next_word(cpu)] = *cpu->reg[REG_A];
             break; // LD (a16), A
         case 0xc9:
             cpu->pc = POP(cpu);
             break; // RET
 		case 0xe0:
-			memory[0xff << 8 | read_next_byte(cpu)] = cpu->reg[REG_A];
+			memory[0xff << 8 | read_next_byte(cpu)] = *cpu->reg[REG_A];
 			break; // LDH (a8), A
 		case 0xf0:
-			cpu->reg[REG_A] = memory[0xff << 8 | read_next_byte(cpu)];
+			*cpu->reg[REG_A] = memory[0xff << 8 | read_next_byte(cpu)];
 			break; // LDH A, (a8)
 		default:
 			printf("Opcode %02x not implemented!\n", op);
@@ -236,14 +207,14 @@ static inline int cpu_exec(CPU *cpu) {
 
 static void cpu_regs_init(CPU *cpu) {
 
-	cpu->reg[REG_A] = 0;
-	cpu->reg[REG_B] = 0;
-	cpu->reg[REG_C] = 0;	
-	cpu->reg[REG_D] = 0;
-	cpu->reg[REG_E] = 0;
-	cpu->reg[REG_H] = 0;
-	cpu->reg[REG_L] = 0;
-	
+	cpu->reg[REG_B] = &cpu->registers.b;
+	cpu->reg[REG_C] = &cpu->registers.c;	
+	cpu->reg[REG_D] = &cpu->registers.d;
+	cpu->reg[REG_E] = &cpu->registers.e;
+	cpu->reg[REG_H] = &cpu->registers.h;
+	cpu->reg[REG_L] = &cpu->registers.l;
+	cpu->reg[REG_A] = &cpu->registers.a;
+
 	cpu->pc = 0;
 	cpu->sp = 0;
 
@@ -295,7 +266,8 @@ int loadFile(const char *fname, size_t addr) {
 
 int main(int argc, char** argv) {
 	allocateMemory();
-	loadFile("cpu_instrs.gb", 0x0);
+    cpu_regs_init(cpu);
+	loadFile("tetris.gb", 0);
 
 	// File check, can be removed after
 	// TODO: to.check it, get the length of memory array and print it
@@ -304,26 +276,27 @@ int main(int argc, char** argv) {
 
 	active = 1;
 	// 0x100 starting address	
-	cpu->pc = 0x0100;
+	cpu->pc = 0;
 
-    // DISPLAY 
+    // DISPLAY
+    /*
     if (initWin() != 0) {
         return -1;
     }
-
+    */
 	while(active) {
 		if (PRINT_LESS) {
 			printf("%04x %s\n", cpu->pc, CPU_INST[memory[cpu->pc]]);
 		} else {
-			printf("PC: %04x (%02x) | SP: %04x | AF: %04x | BC: %04x | DE: %04x | HL: %04x ( %02x %02x %02x %02x ) (%s)\n",
-				cpu->pc, memory[cpu->pc], cpu->sp, get_pair_af(cpu), 
-				get_pair_bc(cpu), get_pair_de(cpu), get_pair_hl(cpu), 
+			printf("PC: %04x (%02x) | SP: %04x | AF: %04x | BC: %04x | DE: %04x | HL: %04x ( %02x %02x %02x %02x ) %s\n",
+				cpu->pc, memory[cpu->pc], cpu->sp, cpu->registers.af, 
+				cpu->registers.bc, cpu->registers.de, cpu->registers.hl, 
 				memory[cpu->pc], memory[cpu->pc + 1], memory[cpu->pc + 2], 
 				memory[cpu->pc + 3], CPU_INST[memory[cpu->pc]]);
 		}
 
 		cpu_exec(cpu);
-        setDisplay(memory);
+       // setDisplay(memory);
 	}
 
 	printf("\nPROGRAM END\n\n");
