@@ -94,12 +94,36 @@ static inline void cpu_inst_push(CPU *cpu, const uint16_t val) {
     mmu_write_byte(--cpu->registers.sp, val >> 8);
     mmu_write_byte(--cpu->registers.sp, val);
 
-    cpu->registers.sp--; // decrement sp location
+    //cpu->registers.sp--; // decrement sp location
+}
+// diff between rotates
+// through carry: flip bit (pos 0 or 7) THROUGH old carry, then gets carry on said pos
+// THROUGH being the path of rotate includes carry flag
+// normal: gets carry on old var. pos (0 or 7) then rotates (basically wrap content)
+static inline void cpu_inst_rla(CPU* cpu) {
+    holdByte = (cpu->registers.a << 1) | cpu->registers.flags.cy;
+    cpu->registers.flags.ze = !(holdByte);
+    cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
+    cpu->registers.flags.cy = cpu->registers.a >> 7;
+    cpu->registers.a = holdByte;
 }
 static inline void cpu_inst_rlca(CPU* cpu) {
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
     cpu->registers.flags.cy = (cpu->registers.a >> 7);
     cpu->registers.a = (cpu->registers.a << 1) | cpu->registers.flags.cy;
+    cpu->registers.flags.ze = !(cpu->registers.a);
+}
+static inline void cpu_inst_rra(CPU* cpu) {
+    holdByte = (cpu->registers.a >> 1) | (cpu->registers.flags.cy << 7);
+    cpu->registers.flags.ze = !(holdByte);
+    cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
+    cpu->registers.flags.cy = cpu->registers.a & 0x1;
+    cpu->registers.a = holdByte;
+}
+static inline void cpu_inst_rrca(CPU* cpu) {
+    cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
+    cpu->registers.flags.cy = cpu->registers.a & 0x1;
+    cpu->registers.a = (cpu->registers.a >> 1) | (cpu->registers.flags.cy << 7);
     cpu->registers.flags.ze = !(cpu->registers.a);
 }
 static inline void cpu_inst_rst(CPU* cpu, const int val) {
@@ -347,8 +371,11 @@ static inline int cpu_exec(CPU *cpu) {
         case 0xe1: cpu->registers.hl = cpu_inst_pop(cpu); break;
         case 0xf1: cpu->registers.af = cpu_inst_pop(cpu); break;
 
-        // 
+        // Rotates
         case 0x07: cpu_inst_rlca(cpu); break; // RLCA
+        case 0x0f: cpu_inst_rrca(cpu); break; // RRCA
+        case 0x17: cpu_inst_rla(cpu); break;  // RLA
+        case 0x1f: cpu_inst_rra(cpu); break;  // RRA
 
         case 0x08:
             holdWord = read_next_word(cpu);
