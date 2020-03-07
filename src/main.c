@@ -93,6 +93,8 @@ static inline uint16_t cpu_inst_pop(CPU *cpu) {
 static inline void cpu_inst_push(CPU *cpu, const uint16_t val) {
     mmu_write_byte(--cpu->registers.sp, val >> 8);
     mmu_write_byte(--cpu->registers.sp, val);
+
+    cpu->registers.sp--; // decrement sp location
 }
 static inline void cpu_inst_rlca(CPU* cpu) {
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
@@ -348,11 +350,11 @@ static inline int cpu_exec(CPU *cpu) {
         // 
         case 0x07: cpu_inst_rlca(cpu); break; // RLCA
 
-        // not ls first?
-        // ld?
-        // ??
-        case 0x08: cpu->registers.sp = read_next_word(cpu); break; // LD (nn), SP
-
+        case 0x08:
+            holdWord = read_next_word(cpu);
+            mmu_write_byte(holdWord, cpu->registers.sp & 0xff);
+            mmu_write_byte(holdWord + 1, cpu->registers.sp >> 8);
+            break; // LD (nn), SP
         case 0x0a: cpu->registers.a = mmu_read_byte(cpu->registers.bc); break; // LD A, (BC)
         case 0x1a: cpu->registers.a = mmu_read_byte(cpu->registers.de); break; // LD A, (DE)
         case 0x22: mmu_write_byte(cpu->registers.hl++, cpu->registers.a); break; // LD (HL+), A
@@ -368,6 +370,9 @@ static inline int cpu_exec(CPU *cpu) {
         case 0x34:
             cpu_inst_inc(cpu, &memory[cpu->registers.hl]); // ?? not handled by MMU
             break; // INC (HL)
+        case 0x36:
+            mmu_write_byte(cpu->registers.hl, read_next_byte(cpu));
+            break; // LD (HL), d8
         case 0x3a:
             cpu->registers.a = mmu_read_byte(cpu->registers.hl--);
             break; // LD A, (HL-)
@@ -386,9 +391,18 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0xe0:
             mmu_write_byte((0xff00 | read_next_byte(cpu)), cpu->registers.a);
 			break; // LDH (a8), A
+        case 0xe2:
+            mmu_write_byte(0xff00 | cpu->registers.c, cpu->registers.a);
+            break; // LD (C), A
+        case 0xe9:
+            cpu->registers.pc = cpu->registers.hl;
+            break; // JP HL
 		case 0xf0:
             cpu->registers.a = mmu_read_byte(0xff00 | read_next_byte(cpu));
 			break; // LDH A, (a8)
+        case 0xf2:
+            cpu->registers.a = mmu_read_byte(0xff00 | cpu->registers.c);
+            break; // LD A, (C)
         case 0xf9:
             cpu->registers.sp = cpu->registers.hl;
             break; // LD SP, HL
