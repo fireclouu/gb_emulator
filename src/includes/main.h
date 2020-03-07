@@ -2,8 +2,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#define NAME "gbemu"
-#define MEMORY_SIZE 0x10000
+#include "display.h"
+#include "mmu.h"
+#include "utils.h"
 
 // GameBoy
 // CPU: 8-bit CPU @ 4 MHz
@@ -75,7 +76,3 @@ typedef struct lr35902 {
     bool sw_interrupt : 1;		// interrupt
 } CPU;
 
-// Display
-bool initWin();
-void closeWin();
-void setDisplay(const uint8_t*);

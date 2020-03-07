@@ -1,10 +1,4 @@
-#include "Main.h"
-#include <SDL2/SDL.h>
-#define WIDTH 640
-#define HEIGHT 480
-#define GB_SCR_W 160
-#define GB_SCR_H 144
-#define VRAM 0x8000
+#include "display.h"
 
 enum RENDERERS {
     TRANSPARENT, WGRAY, SGRAY, DARK, RENDERER_COUNT
@@ -83,7 +77,7 @@ void setDisplay(const uint8_t* memory) {
     SDL_SetRenderDrawColor(gRenderer, 255, 255, 255, 255);
     SDL_RenderClear(gRenderer);
 
-    int read = VRAM;
+    int read = VRAM_START;
 
     for ( int y = 0; y <= GB_SCR_H; y++ ) 
     {

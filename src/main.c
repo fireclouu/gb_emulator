@@ -1,5 +1,5 @@
-#include "Main.h"
-#include "Disassembler.c"
+#include "main.h"
+#include "disassembler.c"
 
 CPU z80;
 CPU *cpu = &z80;
@@ -13,16 +13,23 @@ size_t memory_size; // store memory size
 uint8_t holdByte;
 uint16_t holdWord;
 
-bool active;
+bool halt;
 
+// MMU
+static inline uint8_t mmu_read_byte(uint16_t addr) {
+    return memory[addr];
+}
+static inline void mmu_write_bytr(uint16_t addr, uint8_t data) {
+    memory[addr] = data;
+}
+
+// d8/d16 reads
 static inline uint16_t read_next_word(CPU *cpu) {
-	return memory[cpu->registers.pc++] | (memory[cpu->registers.pc++] << 8);
+    return mmu_read_byte(cpu->registers.pc++) | (mmu_read_byte(cpu->registers.pc++) << 8);
 }
 static inline uint8_t read_next_byte(CPU *cpu) {
-	return memory[cpu->registers.pc++];
+	return mmu_read_byte(cpu->registers.pc++);
 }
-
-// Flags
 
 // Instructions
 static inline uint16_t get_mask(const size_t size, const int bitNum) {
@@ -367,7 +374,7 @@ static inline int cpu_exec(CPU *cpu) {
             break; // LD A, d16
 		default:
 			printf("Opcode %02x not implemented!\n", op);
-			active = 0;
+			halt = 1;
 			return -1;
 	}
     // e6 , 10, c4 8d
@@ -399,7 +406,7 @@ static void cpu_regs_init(CPU *cpu) {
 
 // manual allocation of array
 // TODO: watch this as some gb games will exceed 0x8000
-void allocateMemory() {
+void allocateMemory(uint8_t* memory) {
 	// allocate how much space pointer array need
 	// 65536 bytes
 	memory = malloc(MEMORY_SIZE * sizeof(uint8_t));
@@ -412,8 +419,8 @@ int loadFile(const char *fname, size_t addr) {
 	FILE *fp = fopen(fname, "rb");
 
 	if (fp == NULL) {
-		fprintf(stderr, "File %s not found!", fname);
-		return 1;
+		fprintf(stderr, "File \"%s\" not found!\n", fname);
+		return -1;
 	}
 
 	fseek(fp, 0, SEEK_END);
@@ -437,25 +444,26 @@ int loadFile(const char *fname, size_t addr) {
 }
 
 int main(int argc, char** argv) {
-	allocateMemory();
+    // host
+	allocateMemory(memory);
     cpu_regs_init(cpu);
-	loadFile("roms/cpu_instrs.gb", 0);
+	if (loadFile("roms/cpu_instrs.gb", 0) != 0) {
+        return -1;
+    }
 
-	// File check, can be removed after
-	// TODO: to.check it, get the length of memory array and print it
 	printf("Program size: %lu (%lu bits)\n", memory_size, 8 * memory_size);
 	printf("PROGRAM START\n\n");
 
-	active = 1;
+	halt = 0;
 	// 0x100 starting address	
-	cpu->registers.pc = 0x100;
+	cpu->registers.pc = 0x0000;
 
     // DISPLAY
     if (initWin() != 0) {
         return -1;
     }
     
-	while(active) {
+	while(!halt) {
 		if (PRINT_LESS) {
 			printf("%04x %s\n", cpu->registers.pc, CPU_INST[memory[cpu->registers.pc]]);
 		} else {

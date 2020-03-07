@@ -8,10 +8,10 @@ SDIR = ./src
 
 LIBS=-lm -lSDL2
 
-_DEPS = Main.h
+_DEPS = main.h display.h mmu.h utils.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-_OBJ = Main.o Display.o
+_OBJ = main.o disassembler.o display.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 _SRC = %.c
