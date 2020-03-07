@@ -1,4 +1,4 @@
-#include "Main.h"
+#include "includes/Main.h"
 #include "Disassembler.c"
 
 CPU z80;
@@ -439,7 +439,7 @@ int loadFile(const char *fname, size_t addr) {
 int main(int argc, char** argv) {
 	allocateMemory();
     cpu_regs_init(cpu);
-	loadFile("tetris.gb", 0);
+	loadFile("roms/cpu_instrs.gb", 0);
 
 	// File check, can be removed after
 	// TODO: to.check it, get the length of memory array and print it
@@ -448,7 +448,7 @@ int main(int argc, char** argv) {
 
 	active = 1;
 	// 0x100 starting address	
-	cpu->registers.pc = 0x0;
+	cpu->registers.pc = 0x100;
 
     // DISPLAY
     if (initWin() != 0) {
