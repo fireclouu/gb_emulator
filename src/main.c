@@ -16,10 +16,10 @@ uint16_t holdWord;
 bool halt;
 
 // MMU
-static inline uint8_t  mmu_read_byte(uint16_t addr) {
+static inline uint8_t  mmu_read_byte(const uint16_t addr) {
     return memory[addr];
 }
-static inline void mmu_write_byte(uint16_t addr, uint8_t data) {
+static inline void mmu_write_byte(const uint16_t addr, const uint8_t data) {
     memory[addr] = data;
 }
 
@@ -97,34 +97,34 @@ static inline void cpu_inst_push(CPU *cpu, const uint16_t val) {
     //cpu->registers.sp--; // decrement sp location
 }
 // diff between rotates
-// through carry: flip bit (pos 0 or 7) THROUGH old carry, then gets carry on said pos
+// through carry: flip bit (pos 0 or 7) THROUGH old carry, gets carry on old state
 // THROUGH being the path of rotate includes carry flag
-// normal: gets carry on old var. pos (0 or 7) then rotates (basically wrap content)
-static inline void cpu_inst_rla(CPU* cpu) {
-    holdByte = (cpu->registers.a << 1) | cpu->registers.flags.cy;
+// normal: gets carry on old state pos (0 or 7) then rotates (basically wrap content)
+static inline void cpu_inst_rl(CPU* cpu, uint8_t* reg) {
+    holdByte = (*reg << 1) | cpu->registers.flags.cy;
     cpu->registers.flags.ze = !(holdByte);
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
-    cpu->registers.flags.cy = cpu->registers.a >> 7;
-    cpu->registers.a = holdByte;
+    cpu->registers.flags.cy = *reg >> 7;
+    *reg = holdByte;
 }
-static inline void cpu_inst_rlca(CPU* cpu) {
+static inline void cpu_inst_rlc(CPU* cpu, uint8_t* reg) {
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
-    cpu->registers.flags.cy = (cpu->registers.a >> 7);
-    cpu->registers.a = (cpu->registers.a << 1) | cpu->registers.flags.cy;
-    cpu->registers.flags.ze = !(cpu->registers.a);
+    cpu->registers.flags.cy = (*reg >> 7);
+    *reg = (*reg << 1) | cpu->registers.flags.cy;
+    cpu->registers.flags.ze = !(*reg);
 }
-static inline void cpu_inst_rra(CPU* cpu) {
-    holdByte = (cpu->registers.a >> 1) | (cpu->registers.flags.cy << 7);
+static inline void cpu_inst_rr(CPU* cpu, uint8_t* reg) {
+    holdByte = (*reg >> 1) | (cpu->registers.flags.cy << 7);
     cpu->registers.flags.ze = !(holdByte);
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
-    cpu->registers.flags.cy = cpu->registers.a & 0x1;
-    cpu->registers.a = holdByte;
+    cpu->registers.flags.cy = *reg & 0x1;
+    *reg = holdByte;
 }
-static inline void cpu_inst_rrca(CPU* cpu) {
+static inline void cpu_inst_rrc(CPU* cpu, uint8_t* reg) {
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
-    cpu->registers.flags.cy = cpu->registers.a & 0x1;
-    cpu->registers.a = (cpu->registers.a >> 1) | (cpu->registers.flags.cy << 7);
-    cpu->registers.flags.ze = !(cpu->registers.a);
+    cpu->registers.flags.cy = *reg & 0x1;
+    *reg = (*reg >> 1) | (cpu->registers.flags.cy << 7);
+    cpu->registers.flags.ze = !(*reg);
 }
 static inline void cpu_inst_rst(CPU* cpu, const int val) {
 	cpu_inst_push(cpu, cpu->registers.pc);
@@ -139,7 +139,7 @@ static inline void cpu_inst_sub(CPU* cpu, const uint8_t val, const bool cy) {
     cpu->registers.flags.cy = !(holdWord > 0xff);
     cpu->registers.a = holdWord;
 }
-static inline void cpu_inst_xor(CPU* cpu, uint8_t val) {
+static inline void cpu_inst_xor(CPU* cpu, const uint8_t val) {
 	*cpu->regAddr[REG_A] ^= val;
 	cpu->registers.flags.ze = !(*cpu->regAddr[REG_A]);
 	cpu->registers.flags.ne = cpu->registers.flags.hf = cpu->registers.flags.cy = 0; 
@@ -165,6 +165,39 @@ static inline void service_interrupt(CPU* cpu, bool *sw, const bool val) {
 		*sw = 0;
 	}
 }
+
+// prefix cb
+static inline int cpu_prefix_cb(CPU *cpu, const uint8_t op_cb) {
+    switch(op_cb) 
+    {
+        // ROTATES
+        // RLC r
+        case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x07:
+            cpu_inst_rlc(cpu, cpu->regAddr[op_cb]);
+            break;
+        // RL r
+        case 0x10: case 0x11: case 0x12: case 0x13: case 0x14: case 0x15: case 0x17:
+            cpu_inst_rl(cpu, cpu->regAddr[op_cb & 0x7]);
+            break;
+        // RRC r
+        case 0x08: case 0x09: case 0x0a: case 0x0b: case 0x0c: case 0x0d: case 0x0f:
+            cpu_inst_rrc(cpu, cpu->regAddr[op_cb & 0x7]);
+            break;
+        // RR r
+        case 0x18: case 0x19: case 0x1a: case 0x1b: case 0x1c: case 0x1d: case 0x1f:
+            cpu_inst_rr(cpu, cpu->regAddr[op_cb & 0x7]);
+            break;
+        default:
+			printf("PREFIX CB: Opcode %02x not implemented!\n", op_cb);
+            halt = 1;
+            return -1;
+        // (HL) ? needs to be handled by MMU
+        //case 0x06: cpu // rlc
+    }
+
+    return 0; // stub
+}
+
 // return its cycle value
 static inline int cpu_exec(CPU *cpu) {
 	uint8_t op = memory[cpu->registers.pc]; // is it need to pass through mmu?
@@ -172,7 +205,11 @@ static inline int cpu_exec(CPU *cpu) {
 
 	switch(op) 
 	{
-        // UNTESTED INSTS.
+        // PIPE
+        case 0xcb:
+            cpu_prefix_cb(cpu, read_next_byte(cpu));
+            break; // PREFIX CB
+
 		// RST
 		case 0xc7: cpu_inst_rst(cpu, 0x00); break;
 		case 0xcf: cpu_inst_rst(cpu, 0x08); break;
@@ -372,10 +409,10 @@ static inline int cpu_exec(CPU *cpu) {
         case 0xf1: cpu->registers.af = cpu_inst_pop(cpu); break;
 
         // Rotates
-        case 0x07: cpu_inst_rlca(cpu); break; // RLCA
-        case 0x0f: cpu_inst_rrca(cpu); break; // RRCA
-        case 0x17: cpu_inst_rla(cpu); break;  // RLA
-        case 0x1f: cpu_inst_rra(cpu); break;  // RRA
+        case 0x07: cpu_inst_rlc(cpu, cpu->regAddr[REG_A]); break; // RLCA
+        case 0x0f: cpu_inst_rrc(cpu, cpu->regAddr[REG_A]); break; // RRCA
+        case 0x17: cpu_inst_rl(cpu, cpu->regAddr[REG_A]); break;  // RLA
+        case 0x1f: cpu_inst_rr(cpu, cpu->regAddr[REG_A]); break;  // RRA
 
         case 0x08:
             holdWord = read_next_word(cpu);
@@ -403,10 +440,6 @@ static inline int cpu_exec(CPU *cpu) {
         case 0x3a:
             cpu->registers.a = mmu_read_byte(cpu->registers.hl--);
             break; // LD A, (HL-)
-
-        // HUGE
-        case 0xcb:
-            break; // PREFIX CB
 
         case 0xcd:
             cpu_inst_push(cpu, cpu->registers.pc);
