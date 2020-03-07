@@ -4,7 +4,7 @@
 CPU z80;
 CPU *cpu = &z80;
 
-bool PRINT_LESS = 1;
+bool PRINT_LESS = 0;
 static inline void cpu_inst_push(CPU *a1, const uint16_t a2);
 
 uint8_t *memory;
@@ -16,10 +16,10 @@ uint16_t holdWord;
 bool halt;
 
 // MMU
-static inline uint8_t mmu_read_byte(uint16_t addr) {
+static inline uint8_t  mmu_read_byte(uint16_t addr) {
     return memory[addr];
 }
-static inline void mmu_write_bytr(uint16_t addr, uint8_t data) {
+static inline void mmu_write_byte(uint16_t addr, uint8_t data) {
     memory[addr] = data;
 }
 
@@ -62,9 +62,9 @@ static inline void cpu_inst_call(CPU *cpu, const uint16_t addr) {
 	cpu->registers.pc = addr;
 }
 static inline void cpu_inst_cp(CPU *cpu, const uint8_t val) {
-	cpu->registers.flags.ze = (*cpu->reg[REG_A] == val); // same value subtraction = 0
+	cpu->registers.flags.ze = (*cpu->regAddr[REG_A] == val); // same value subtraction = 0
 	cpu->registers.flags.ne = 1;
-	cpu->registers.flags.hf = (*cpu->reg[REG_A] & 0xf) >= (val & 0xf);
+	cpu->registers.flags.hf = (*cpu->regAddr[REG_A] & 0xf) >= (val & 0xf);
     // cy not affected
 }
 static inline void cpu_inst_dec(CPU* cpu, uint8_t* reg) {
@@ -88,11 +88,11 @@ static inline void cpu_inst_or(CPU* cpu, const uint8_t val) {
     cpu->registers.flags.ne = cpu->registers.flags.hf = cpu->registers.flags.cy = 0;
 }
 static inline uint16_t cpu_inst_pop(CPU *cpu) {
-    return (memory[cpu->registers.sp++] | (memory[cpu->registers.sp++] << 8));
+    return mmu_read_byte(cpu->registers.sp++) | (mmu_read_byte(cpu->registers.sp++) << 8);
 }
 static inline void cpu_inst_push(CPU *cpu, const uint16_t val) {
-	memory[--cpu->registers.sp] = val >> 8;
-	memory[--cpu->registers.sp] = val;
+    mmu_write_byte(--cpu->registers.sp, val >> 8);
+    mmu_write_byte(--cpu->registers.sp, val);
 }
 static inline void cpu_inst_rlca(CPU* cpu) {
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
@@ -104,9 +104,18 @@ static inline void cpu_inst_rst(CPU* cpu, const int val) {
 	cpu_inst_push(cpu, cpu->registers.pc);
 	cpu->registers.pc = val;
 }
+// book says set if "no borrow"
+static inline void cpu_inst_sub(CPU* cpu, const uint8_t val, const bool cy) {
+    holdWord = cpu->registers.a - (val + cy);
+    cpu->registers.flags.ze = !(holdWord);
+    cpu->registers.flags.ne = 1;
+    cpu->registers.flags.hf = !((uint8_t) ((cpu->registers.a & 0xf) - ((val & 0xf) + cy)) > 0xf);
+    cpu->registers.flags.cy = !(holdWord > 0xff);
+    cpu->registers.a = holdWord;
+}
 static inline void cpu_inst_xor(CPU* cpu, uint8_t val) {
-	*cpu->reg[REG_A] ^= val;
-	cpu->registers.flags.ze = !(*cpu->reg[REG_A]);
+	*cpu->regAddr[REG_A] ^= val;
+	cpu->registers.flags.ze = !(*cpu->regAddr[REG_A]);
 	cpu->registers.flags.ne = cpu->registers.flags.hf = cpu->registers.flags.cy = 0; 
 }
 // conditional jumps
@@ -132,7 +141,7 @@ static inline void service_interrupt(CPU* cpu, bool *sw, const bool val) {
 }
 // return its cycle value
 static inline int cpu_exec(CPU *cpu) {
-	uint8_t op = memory[cpu->registers.pc];
+	uint8_t op = memory[cpu->registers.pc]; // is it need to pass through mmu?
 	cpu->registers.pc++;
 
 	switch(op) 
@@ -161,15 +170,15 @@ static inline int cpu_exec(CPU *cpu) {
 
         // INC regs
         case 0x04: case 0x0c: case 0x14: case 0x1c: case 0x24: case 0x2c: case 0x3c:
-            cpu_inst_inc(cpu, cpu->reg[(op & 0x38) >> 3]);
+            cpu_inst_inc(cpu, cpu->regAddr[(op & 0x38) >> 3]);
             break;
 		// DEC regs
 		case 0x05: case 0x0d: case 0x15: case 0x1d: case 0x25: case 0x2d: case 0x3d:
-			cpu_inst_dec(cpu, cpu->reg[(op & 0x38) >> 3]);
+			cpu_inst_dec(cpu, cpu->regAddr[(op & 0x38) >> 3]);
 			break;
 		// LD regs, d8
 		case 0x06: case 0x0e: case 0x16: case 0x1e: case 0x26: case 0x2e: case 0x3e:
-			(*cpu->reg[(op & 0x38) >> 3]) = read_next_byte(cpu);
+			(*cpu->regAddr[(op & 0x38) >> 3]) = read_next_byte(cpu);
 			break;
 		// LD reg, reg
 		case 0x40: case 0x41: case 0x42: case 0x43: case 0x44: case 0x45: case 0x47:
@@ -179,55 +188,70 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x67:
 		case 0x68: case 0x69: case 0x6a: case 0x6b: case 0x6c: case 0x6d: case 0x6f:
 		case 0x78: case 0x79: case 0x7a: case 0x7b: case 0x7c: case 0x7d: case 0x7f:
-			*cpu->reg[(op & 0x38) >> 3] = *cpu->reg[op & 0x7];
+			*cpu->regAddr[(op & 0x38) >> 3] = *cpu->regAddr[op & 0x7];
 			break;
         // ADD regs
         case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85: case 0x87:
-            cpu_inst_add(cpu, *cpu->reg[op & 0x7], 0);
+            cpu_inst_add(cpu, *cpu->regAddr[op & 0x7], 0);
             break;
         // ADD (HL)/d8
         case 0x86:
-            cpu_inst_add(cpu, memory[cpu->registers.hl], 0);
+            cpu_inst_add(cpu, mmu_read_byte(cpu->registers.hl), 0);
             break;
         case 0xc6:
             cpu_inst_add(cpu, read_next_byte(cpu), 0);
             break;
         // ADC regs
         case 0x88: case 0x89: case 0x8a: case 0x8b: case 0x8c: case 0x8d: case 0x8f:
-            cpu_inst_add(cpu, *cpu->reg[op & 0x7], cpu->registers.flags.cy);
+            cpu_inst_add(cpu, *cpu->regAddr[op & 0x7], cpu->registers.flags.cy);
             break;
         // ADC (HL)
         case 0x8e:
-            cpu_inst_add(cpu, memory[cpu->registers.hl], cpu->registers.flags.cy);
+            cpu_inst_add(cpu, mmu_read_byte(cpu->registers.hl), cpu->registers.flags.cy);
             break;
+        // SUB regs
+        case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x97:
+            cpu_inst_sub(cpu, *cpu->regAddr[op & 0x7], 0);
+            break;
+        // SBC regs
+        case 0x98: case 0x99: case 0x9a: case 0x9b: case 0x9c: case 0x9d: case 0x9f:
+            cpu_inst_sub(cpu, *cpu->regAddr[op & 0x7], cpu->registers.flags.cy);
+            break;
+        // SUB/SBC (HL)
+        case 0x96: 
+            cpu_inst_sub(cpu, mmu_read_byte(cpu->registers.hl), 0);
+            break; // SUB (HL)
+        case 0x9e:
+            cpu_inst_sub(cpu, mmu_read_byte(cpu->registers.hl), cpu->registers.flags.cy);
+            break; // SBC (HL)
         // AND regs
         case 0xa0: case 0xa1: case 0xa2: case 0xa3: case 0xa4: case 0xa5: case 0xa7:
-            cpu_inst_and(cpu, *cpu->reg[op & 0x7]);
+            cpu_inst_and(cpu, *cpu->regAddr[op & 0x7]);
             break;
         // AND (HL)/d16
         case 0xa6:
-            cpu_inst_and(cpu, memory[cpu->registers.hl]);
+            cpu_inst_and(cpu, mmu_read_byte(cpu->registers.hl));
             break;
         case 0xe6:
             cpu_inst_and(cpu, read_next_byte(cpu));
             break;
 		// XOR
 		case 0xa8: case 0xa9: case 0xaa: case 0xab: case 0xac: case 0xad: case 0xaf:
-			cpu_inst_xor(cpu, *cpu->reg[op & 0x7]);
+			cpu_inst_xor(cpu, *cpu->regAddr[op & 0x7]);
 			break;
         // XOR (HL)/d8
-        case 0xae: cpu_inst_xor(cpu, memory[cpu->registers.hl]); break;
+        case 0xae: cpu_inst_xor(cpu, mmu_read_byte(cpu->registers.hl)); break;
         case 0xee: cpu_inst_xor(cpu, read_next_byte(cpu)); break;
         // OR regs
         case 0xb0: case 0xb1: case 0xb2: case 0xb3: case 0xb4: case 0xb5: case 0xb7:
-            cpu_inst_or(cpu, *cpu->reg[op & 0x7]);
+            cpu_inst_or(cpu, *cpu->regAddr[op & 0x7]);
             break;
         // OR (HL)/d8
-        case 0xb6: cpu_inst_or(cpu, memory[cpu->registers.hl]); break;
+        case 0xb6: cpu_inst_or(cpu, mmu_read_byte(cpu->registers.hl)); break;
         case 0xf6: cpu_inst_or(cpu, read_next_byte(cpu)); break;
         // CP regs
 		case 0xb8: case 0xb9: case 0xba: case 0xbb: case 0xbc: case 0xbd: case 0xbf:
-			cpu_inst_cp(cpu, *cpu->reg[op & 0x7]);
+			cpu_inst_cp(cpu, *cpu->regAddr[op & 0x7]);
 			break;
 		case 0xfe:
 			cpu_inst_cp(cpu, read_next_byte(cpu));
@@ -293,16 +317,16 @@ static inline int cpu_exec(CPU *cpu) {
 		case 0x11: cpu->registers.de = read_next_word(cpu); break;
 		case 0x21: cpu->registers.hl = read_next_word(cpu); break;
         // LD rp/d16, A (except hl)
-        case 0x02: memory[cpu->registers.bc]   = cpu->registers.a; break;
-        case 0x12: memory[cpu->registers.de]   = cpu->registers.a; break;
-        case 0xea: memory[read_next_word(cpu)] = cpu->registers.a; break;
+        case 0x02: mmu_write_byte(cpu->registers.bc, cpu->registers.a); break;
+        case 0x12: mmu_write_byte(cpu->registers.de, cpu->registers.a);  break;
+        case 0xea: mmu_write_byte(read_next_word(cpu), cpu->registers.a);  break;
 		// LD r, hl
 		case 0x46: case 0x4e: case 0x56: case 0x5e: case 0x66: case 0x6e: case 0x7e:
-			*cpu->reg[(op & 0x38) >> 3] = memory[cpu->registers.hl];
+			*cpu->regAddr[(op & 0x38) >> 3] = mmu_read_byte(cpu->registers.hl);
 			break;	
 		// LD hl, r
 		case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x77:
-			memory[cpu->registers.hl] = *cpu->reg[op & 0x7];
+            mmu_write_byte(cpu->registers.hl, *cpu->regAddr[op & 0x7]);
 			break;
 
         // INC rp
@@ -329,24 +353,23 @@ static inline int cpu_exec(CPU *cpu) {
         // ??
         case 0x08: cpu->registers.sp = read_next_word(cpu); break; // LD (nn), SP
 
-        case 0x0a: cpu->registers.a = memory[cpu->registers.bc]; break; // LD A, (BC)
-        case 0x1a: cpu->registers.a = memory[cpu->registers.de]; break; // LD A, (DE)
-        case 0x22: memory[cpu->registers.hl++] = cpu->registers.a; break; // LD (HL+), A
+        case 0x0a: cpu->registers.a = mmu_read_byte(cpu->registers.bc); break; // LD A, (BC)
+        case 0x1a: cpu->registers.a = mmu_read_byte(cpu->registers.de); break; // LD A, (DE)
+        case 0x22: mmu_write_byte(cpu->registers.hl++, cpu->registers.a); break; // LD (HL+), A
         case 0x2a:
-            cpu->registers.a = memory[cpu->registers.hl++];
+            cpu->registers.a = mmu_read_byte(cpu->registers.hl++);
             break; // LD A, (HL+)
         case 0x31:
             cpu->registers.sp = read_next_word(cpu);
             break; // LD SP, d16
 		case 0x32:
-			memory[cpu->registers.hl] = *cpu->reg[REG_A];
-            cpu->registers.hl--;
+            mmu_write_byte(cpu->registers.hl--, cpu->registers.a);
 			break; // LD (HL-), A
         case 0x34:
-            cpu_inst_inc(cpu, &memory[cpu->registers.hl]);
+            cpu_inst_inc(cpu, &memory[cpu->registers.hl]); // ?? not handled by MMU
             break; // INC (HL)
         case 0x3a:
-            cpu->registers.a = memory[cpu->registers.hl--];
+            cpu->registers.a = mmu_read_byte(cpu->registers.hl--);
             break; // LD A, (HL-)
 
         // HUGE
@@ -361,16 +384,16 @@ static inline int cpu_exec(CPU *cpu) {
             cpu->registers.pc = cpu_inst_pop(cpu);
             break; // RET
 		case 0xe0:
-			memory[0xff << 8 | read_next_byte(cpu)] = *cpu->reg[REG_A];
+            mmu_write_byte((0xff00 | read_next_byte(cpu)), cpu->registers.a);
 			break; // LDH (a8), A
 		case 0xf0:
-			*cpu->reg[REG_A] = memory[0xff << 8 | read_next_byte(cpu)];
+            cpu->registers.a = mmu_read_byte(0xff00 | read_next_byte(cpu));
 			break; // LDH A, (a8)
         case 0xf9:
             cpu->registers.sp = cpu->registers.hl;
             break; // LD SP, HL
         case 0xfa:
-            cpu->registers.a = memory[read_next_word(cpu)];
+            cpu->registers.a = mmu_read_byte(read_next_word(cpu));
             break; // LD A, d16
 		default:
 			printf("Opcode %02x not implemented!\n", op);
@@ -386,13 +409,13 @@ static inline int cpu_exec(CPU *cpu) {
 
 static void cpu_regs_init(CPU *cpu) {
 
-	cpu->reg[REG_B] = &cpu->registers.b;
-	cpu->reg[REG_C] = &cpu->registers.c;	
-	cpu->reg[REG_D] = &cpu->registers.d;
-	cpu->reg[REG_E] = &cpu->registers.e;
-	cpu->reg[REG_H] = &cpu->registers.h;
-	cpu->reg[REG_L] = &cpu->registers.l;
-	cpu->reg[REG_A] = &cpu->registers.a;
+	cpu->regAddr[REG_B] = &cpu->registers.b;
+	cpu->regAddr[REG_C] = &cpu->registers.c;	
+	cpu->regAddr[REG_D] = &cpu->registers.d;
+	cpu->regAddr[REG_E] = &cpu->registers.e;
+	cpu->regAddr[REG_H] = &cpu->registers.h;
+	cpu->regAddr[REG_L] = &cpu->registers.l;
+	cpu->regAddr[REG_A] = &cpu->registers.a;
 
 	cpu->registers.pc = 0;
 	cpu->registers.sp = 0;
@@ -406,9 +429,8 @@ static void cpu_regs_init(CPU *cpu) {
 
 // manual allocation of array
 // TODO: watch this as some gb games will exceed 0x8000
-void allocateMemory(uint8_t* memory) {
-	// allocate how much space pointer array need
-	// 65536 bytes
+void allocateMemory() {
+	// allocate how much space array need
 	memory = malloc(MEMORY_SIZE * sizeof(uint8_t));
 	// reset array
 	memset(memory, 0, MEMORY_SIZE);
@@ -445,7 +467,7 @@ int loadFile(const char *fname, size_t addr) {
 
 int main(int argc, char** argv) {
     // host
-	allocateMemory(memory);
+	allocateMemory();
     cpu_regs_init(cpu);
 	if (loadFile("roms/cpu_instrs.gb", 0) != 0) {
         return -1;
@@ -483,7 +505,7 @@ int main(int argc, char** argv) {
 		cpu_exec(cpu);
         setDisplay(memory);
 	}
-
+    closeWin();
 	printf("\nPROGRAM END\n\n");
 }
 

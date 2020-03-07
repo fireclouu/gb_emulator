@@ -72,7 +72,7 @@ typedef struct lr35902 {
         uint16_t pc, sp;  // 16-bit register address
     } registers;
 
-	uint8_t *reg[8];
+	uint8_t *regAddr[8];
     bool sw_interrupt : 1;		// interrupt
 } CPU;
 
