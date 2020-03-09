@@ -45,7 +45,7 @@ static inline void cpu_inst_and(CPU* cpu, const uint8_t val) {
     cpu->registers.flags.ne = cpu->registers.flags.cy = 0;
 }
 static inline void cpu_inst_call(CPU *cpu, const uint16_t addr) {
-	cpu_inst_push(cpu, addr + 3);
+	cpu_inst_push(cpu, cpu->registers.pc);
 	cpu->registers.pc = addr;
 }
 static inline void cpu_inst_cp(CPU *cpu, const uint8_t val) {
@@ -79,9 +79,9 @@ static inline uint16_t cpu_inst_pop(CPU *cpu) {
 }
 static inline void cpu_inst_push(CPU *cpu, const uint16_t val) {
     mmu_write_byte(--cpu->registers.sp, val >> 8);
-    mmu_write_byte(--cpu->registers.sp, val);
+    mmu_write_byte(--cpu->registers.sp, val & 0xff);
 
-   // cpu->registers.sp--; // decrement sp location
+   //cpu->registers.sp--; // decrement sp location
 }
 // diff between rotates
 // through carry: flip bit (pos 0 or 7) THROUGH old carry, gets carry on old state
@@ -117,8 +117,8 @@ static inline uint8_t cpu_inst_rrc(CPU* cpu, uint8_t val) {
     cpu->registers.flags.ze = !(val);
     return val;
 }
-static inline void cpu_inst_rst(CPU* cpu, const uint16_t pc, const int val) {
-	cpu_inst_push(cpu, pc);
+static inline void cpu_inst_rst(CPU* cpu, const int val) {
+	cpu_inst_push(cpu, cpu->registers.pc);
 	cpu->registers.pc = val;
 }
 // book says set if "no borrow"
@@ -139,10 +139,10 @@ static inline void cpu_inst_xor(CPU* cpu, const uint8_t val) {
 static inline void cpu_inst_cond_call(CPU* cpu, const bool cond, const uint16_t addr) {
     if (cond) cpu_inst_call(cpu, addr);
 }
-static inline void cpu_inst_cond_jp(CPU* cpu, const bool cond, const uint16_t pc, const int8_t data) {
-	if (cond) cpu->registers.pc = (pc + data);
+static inline void cpu_inst_cond_jp(CPU* cpu, const bool cond, const int8_t data) {
+	if (cond) cpu->registers.pc +=  data;
 }
-static inline void cpu_inst_cond_ret(CPU* cpu, const bool cond, const uint16_t pc) {
+static inline void cpu_inst_cond_ret(CPU* cpu, const bool cond) {
     if (cond) cpu->registers.pc = cpu_inst_pop(cpu);
 }
 
@@ -216,11 +216,6 @@ static inline int cpu_prefix_cb(CPU *cpu, const uint8_t op_cb) {
 		case 0xf8: case 0xf9: case 0xfa: case 0xfb: case 0xfc: case 0xfd: case 0xff:
             cpu_inst_set(cpu, cpu->regAddr[op_cb & 0x7], (op_cb & 0x38) >> 3);
             break;
-        default:
-			printf("PREFIX CB: Opcode %02x not implemented!\n", op_cb);
-            halt = 1;
-            return -1;
-
         // (HL) MMU
         case 0x06:
             holdSrc = cpu->registers.hl;
@@ -238,6 +233,11 @@ static inline int cpu_prefix_cb(CPU *cpu, const uint8_t op_cb) {
             holdSrc = cpu->registers.hl;
             mmu_write_byte(holdSrc, cpu_inst_rr(cpu, mmu_read_byte(holdSrc)));
             break;// rr
+        default:
+			printf("PREFIX CB: Opcode %02x not implemented!\n", op_cb);
+            halt = 1;
+            return -1;
+
     }
 
     return 0; // stub
@@ -246,8 +246,8 @@ static inline int cpu_prefix_cb(CPU *cpu, const uint8_t op_cb) {
 // return its cycle value
 static inline int cpu_exec(CPU *cpu) {
 	uint8_t op = memory[cpu->registers.pc]; // is it need to pass through mmu?
-    uint16_t current_pc = cpu->registers.pc; // for jumps
-	cpu->registers.pc++;
+	
+    cpu->registers.pc++;
 
 	switch(op) 
 	{
@@ -257,14 +257,14 @@ static inline int cpu_exec(CPU *cpu) {
             break; // PREFIX CB
 
 		// RST
-		case 0xc7: cpu_inst_rst(cpu, current_pc, 0x00); break;
-		case 0xcf: cpu_inst_rst(cpu, current_pc, 0x08); break;
-		case 0xd7: cpu_inst_rst(cpu, current_pc, 0x10); break;
-		case 0xdf: cpu_inst_rst(cpu, current_pc, 0x18); break;
-		case 0xe7: cpu_inst_rst(cpu, current_pc, 0x20); break;
-		case 0xef: cpu_inst_rst(cpu, current_pc, 0x28); break;
-		case 0xf7: cpu_inst_rst(cpu, current_pc, 0x30); break;
-		case 0xff: cpu_inst_rst(cpu, current_pc, 0x38); break;
+		case 0xc7: cpu_inst_rst(cpu, 0x00); break;
+		case 0xcf: cpu_inst_rst(cpu, 0x08); break;
+		case 0xd7: cpu_inst_rst(cpu, 0x10); break;
+		case 0xdf: cpu_inst_rst(cpu, 0x18); break;
+		case 0xe7: cpu_inst_rst(cpu, 0x20); break;
+		case 0xef: cpu_inst_rst(cpu, 0x28); break;
+		case 0xf7: cpu_inst_rst(cpu, 0x30); break;
+		case 0xff: cpu_inst_rst(cpu, 0x38); break;
 
 		// NOP
 		case 0x00:
@@ -376,16 +376,16 @@ static inline int cpu_exec(CPU *cpu) {
 		// JUMPS
         // Conditional JP
 		case 0x20:
-            cpu_inst_cond_jp(cpu, !cpu->registers.flags.ze, current_pc, (int8_t) read_next_byte(cpu));
+            cpu_inst_cond_jp(cpu, !cpu->registers.flags.ze, (int8_t) read_next_byte(cpu));
             break; // NZ
         case 0x28:
-            cpu_inst_cond_jp(cpu, cpu->registers.flags.ze,  current_pc, (int8_t) read_next_byte(cpu));
+            cpu_inst_cond_jp(cpu, cpu->registers.flags.ze, (int8_t) read_next_byte(cpu));
             break; // Z
         case 0x30:
-            cpu_inst_cond_jp(cpu, !cpu->registers.flags.cy, current_pc, (int8_t) read_next_byte(cpu));
+            cpu_inst_cond_jp(cpu, !cpu->registers.flags.cy, (int8_t) read_next_byte(cpu));
             break; // NC
         case 0x38:
-            cpu_inst_cond_jp(cpu, cpu->registers.flags.cy,  current_pc, (int8_t) read_next_byte(cpu));
+            cpu_inst_cond_jp(cpu, cpu->registers.flags.cy, (int8_t) read_next_byte(cpu));
             break; // C
 
         // Conditional CALL
@@ -404,24 +404,29 @@ static inline int cpu_exec(CPU *cpu) {
 
         // Conditional RET
         case 0xc0:
-            cpu_inst_cond_ret(cpu, !(cpu->registers.flags.ze), current_pc);
+            cpu_inst_cond_ret(cpu, !(cpu->registers.flags.ze));
             break;
         case 0xc8:
-            cpu_inst_cond_ret(cpu, (cpu->registers.flags.ze), current_pc);
+            cpu_inst_cond_ret(cpu, (cpu->registers.flags.ze));
             break;
         case 0xd0:
-            cpu_inst_cond_ret(cpu, !(cpu->registers.flags.cy), current_pc);
+            cpu_inst_cond_ret(cpu, !(cpu->registers.flags.cy));
             break;
         case 0xd8:
-            cpu_inst_cond_ret(cpu, (cpu->registers.flags.cy), current_pc);
+            cpu_inst_cond_ret(cpu, (cpu->registers.flags.cy));
             break;
 
         case 0x18:
-            cpu_inst_cond_jp(cpu, true, read_next_byte(cpu), current_pc);
+            cpu_inst_cond_jp(cpu, true, read_next_byte(cpu));
             break; // JR r8
 		case 0xc3: cpu->registers.pc = read_next_word(cpu); break; // JP d16
 
         // Pairs
+        // DEC rp
+        case 0x0b: cpu->registers.bc--; break;
+        case 0x1b: cpu->registers.de--; break;           
+        case 0x2b: cpu->registers.hl--; break;
+        case 0x3b: cpu->registers.sp--; break;
 		// LD RP, d16
 		case 0x01: cpu->registers.bc = read_next_word(cpu); break;
 		case 0x11: cpu->registers.de = read_next_word(cpu); break;
@@ -498,8 +503,7 @@ static inline int cpu_exec(CPU *cpu) {
             break; // LD A, (HL-)
 
         case 0xcd:
-            cpu_inst_push(cpu, cpu->registers.pc);
-            cpu->registers.pc = read_next_word(cpu);
+            cpu_inst_call(cpu, read_next_word(cpu));;
             break; // CALL d16
         case 0xc9:
             cpu->registers.pc = cpu_inst_pop(cpu);
@@ -525,12 +529,16 @@ static inline int cpu_exec(CPU *cpu) {
         case 0xfa:
             cpu->registers.a = mmu_read_byte(read_next_word(cpu));
             break; // LD A, d16
+
+        // stubs
+        case 0xfb: break; // EI
+
 		default:
 			printf("Opcode %02x not implemented!\n", op);
 			halt = 1;
 			return -1;
 	}
-	
+
     return 0; // stub: cycle
 }
 

@@ -31,21 +31,15 @@ uint8_t a, b, c;
 size_t loopcount = 0;
 
 int detectLockup() {
-    switch(cpu->registers.pc) {
-        case 0x64:
+    switch(memory[cpu->registers.pc]) {
+        case 0x00:
             a++;
-            break;
-        case 0x66:
-            b++;
-            break;
-        case 0x68:
-            c++;
             break;
         default:
             a = b = c = 0;
     }
 
-    if ((a & b & c) == 3) {
+    if ((a) == 10) {
         printf("ERROR! system locked up! loop cycle: %lu\n", loopcount);
         return 1;
     } else {
@@ -59,15 +53,17 @@ int main(int argc, char** argv)
 
     while(!halt) {
         printTrace(PRINT_FULL);
+
+        if (cpu->registers.pc == 0xfffff) { // disable
+            printf("%04x reached", cpu->registers.pc);
+            return 0;
+        }
+
 		cpu_exec(cpu);
         loopcount++;
         // setDisplay(memory);
-        if (detectLockup()) return 1;
+        //if (detectLockup()) return 1;
 
-        if (cpu->registers.pc == 0xfe) {
-            printf("Success!");
-            break;
-        }
 	}
 
     closeWin();
