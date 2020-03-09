@@ -1,3 +1,6 @@
+#ifndef _DISPLAY_H
+#define _DISPLAY_H
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <SDL2/SDL.h>
@@ -13,3 +16,5 @@
 bool initWin();
 void closeWin();
 void setDisplay(const uint8_t*);
+
+#endif
