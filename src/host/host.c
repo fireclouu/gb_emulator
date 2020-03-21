@@ -3,7 +3,7 @@
 #include "cpu.h"
 #include "display.h"
 #include "host.h"
-#include "main.h"
+#include "shared.h"
 #include "utils.h"
 #include "disassembler.c"
 

@@ -1,13 +1,17 @@
 #include <stdio.h>
 #include "includes/display.h"
 #include "includes/host.h"
+#include "shared.h"
 #include "includes/utils.h"
 #include "gameboy/cpu.c"
 
 int init(const char* fname) 
 {
 	printf("PROGRAM START\n\n");
-    
+
+    // reset cycle counters
+    cycle_bytes = cycle_cpu = 0;
+
     // Memory
     allocateMemory();
 	if (loadFile(fname, 0) != 0) return 1;
@@ -18,11 +22,10 @@ int init(const char* fname)
     cpu->registers.pc = 0x0000;
 
     // Host Display 
-    /*
-    if (initWin() != 0) return 1;
+    //if (initWin() != 0) return 1;
 
     halt = 0;
-    */
+
     return 0;
 }
 
@@ -52,18 +55,40 @@ int main(int argc, char** argv)
     if(init("roms/dmg_boot.bin") != 0) return 1;
 
     while(!halt) {
+        // time
+        gettimeofday(&tv, NULL);
+        
+        // unify time on next executions
+        timer = USYSTIME;
+        
+        //print
         printTrace(PRINT_FULL);
 
-        if (cpu->registers.pc == 0xfffff) { // disable
+        /*if (cpu->registers.pc == 0x00) { // disable
             printf("%04x reached", cpu->registers.pc);
             return 0;
+        }*/
+
+        // service interrupt
+        if ((memory[ADDR_IF] & 0x1f) && !(memory[ADDR_IE]))
+        {
+            // by priority
+            if (memory[ADDR_IF] & 0x1)
+            {
+                memory[ADDR_IF] &= 0xfe;
+                memory[ADDR_IE] |= 0x1;
+                cpu_inst_rst(cpu, 0x40);
+            }
         }
-
+        // cpu
 		cpu_exec(cpu);
-        loopcount++;
-        // setDisplay(memory);
-        //if (detectLockup()) return 1;
 
+        // polling
+        gpu_int_ly(0);
+
+        //loopcount++;
+        //setDisplay(memory);
+        //if (detectLockup()) return 1;
 	}
 
     closeWin();

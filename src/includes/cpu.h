@@ -1,8 +1,14 @@
 #ifndef _CPU_H
 #define _CPU_H
-
+#define ADDR_CB 0x100
 #include <stdio.h>
 #include <stdbool.h>
+
+// cycles holder
+uint8_t tmp_cycle_cpu, tmp_cycle_bytes;
+
+// cb address holder
+uint16_t addr_cb;
 
 // Custom Z80 cpu
 enum REG_ID {
