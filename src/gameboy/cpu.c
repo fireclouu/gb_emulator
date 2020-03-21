@@ -1,21 +1,17 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "cpu.h"
+#include "cycle.h"
 #include "main.h"
-#include "cycle.c"
-
 
 #define ADDR_CB 0x100
 
 static inline void cpu_inst_push(CPU *a1, const uint16_t a2);
 
 // holders
-int addr_cb;
-uint8_t holdByte;
-uint16_t holdWord;
-uint16_t holdSrc;
 uint8_t tmp_cycle_bytes;
 uint8_t tmp_cycle_cpu;
+int addr_cb;
 
 // cycle
 size_t cycle_bytes;
@@ -31,13 +27,13 @@ static inline uint8_t read_next_byte(CPU *cpu) {
 
 // Instructions
 static inline void cpu_inst_add(CPU* cpu, const uint8_t val, const bool cy) {
-    holdWord = cpu->registers.a + val + cy;
-    cpu->registers.flags.ze = !(holdWord);
+    uint16_t hold_word = cpu->registers.a + val + cy;
+    cpu->registers.flags.ze = !(hold_word);
     cpu->registers.flags.ne = 0;
     cpu->registers.flags.hf = (uint8_t) ((val & 0xf) + (cpu->registers.a & 0xf) + cy) > 0xf;
-    cpu->registers.flags.cy = holdWord > 0xff;
+    cpu->registers.flags.cy = hold_word > 0xff;
 
-    cpu->registers.a = holdWord;
+    cpu->registers.a = hold_word;
 }
 static inline void cpu_inst_add_hl(CPU* cpu, const uint16_t val) {
     // flag ze not affected
@@ -63,19 +59,19 @@ static inline void cpu_inst_cp(CPU *cpu, const uint8_t val) {
     cpu->registers.flags.cy = cpu->registers.a < val;
 }
 static inline void cpu_inst_dec(CPU* cpu, uint8_t* reg) {
-	holdByte = *reg - 1;
-	cpu->registers.flags.ze = !(holdByte);
+	uint8_t hold_byte = *reg - 1;
+	cpu->registers.flags.ze = !(hold_byte);
 	cpu->registers.flags.ne = 1;
 	cpu->registers.flags.hf = (uint8_t) ((*reg & 0xf) - 1) > 0xf;
 
     (*reg)--;
 }
 static inline uint8_t cpu_inst_inc(CPU* cpu, const uint8_t val) {
-    holdByte = val + 1;
-    cpu->registers.flags.ze = !(holdByte);
+    uint8_t hold_byte = val + 1;
+    cpu->registers.flags.ze = !(hold_byte);
     cpu->registers.flags.ne = 0;
     cpu->registers.flags.hf = (uint8_t) ((val & 0xf) + 1) > 0xf;
-    return holdByte;
+    return hold_byte;
 }
 static inline void cpu_inst_or(CPU* cpu, const uint8_t val) {
     cpu->registers.a |= val;
@@ -96,10 +92,10 @@ static inline void cpu_inst_push(CPU *cpu, const uint16_t val) {
 // THROUGH being the path of rotate includes carry flag
 // normal: gets carry on old state pos (0 or 7) then rotates (basically wrap content)
 static inline uint8_t cpu_inst_rl(CPU* cpu, uint8_t val) {
-    holdByte = cpu->registers.flags.cy;
+    uint8_t hold_byte = cpu->registers.flags.cy;
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
     cpu->registers.flags.cy = val >> 7;
-    val = (val << 1) | holdByte;                        // !
+    val = (val << 1) | hold_byte;                        // !
     cpu->registers.flags.ze = !(val);
     return val;
 }
@@ -111,10 +107,10 @@ static inline uint8_t cpu_inst_rlc(CPU* cpu, uint8_t val) {
     return val;
 }
 static inline uint8_t cpu_inst_rr(CPU* cpu, uint8_t val) {
-    holdByte = cpu->registers.flags.cy;
+    uint8_t hold_byte = cpu->registers.flags.cy;
     cpu->registers.flags.ne = cpu->registers.flags.hf = 0;
     cpu->registers.flags.cy = val & 0x1;
-    val = (val >> 1) | (holdByte << 7);                // !
+    val = (val >> 1) | (hold_byte << 7);                // !
     cpu->registers.flags.ze = !(val);
     return val;
 }
@@ -131,12 +127,12 @@ static inline void cpu_inst_rst(CPU* cpu, const int val) {
 }
 // book says set if "no borrow"
 static inline void cpu_inst_sub(CPU* cpu, const uint8_t val, const bool cy) {
-    holdWord = cpu->registers.a - (val + cy);
-    cpu->registers.flags.ze = !(holdWord);
+    uint16_t hold_word = cpu->registers.a - (val + cy);
+    cpu->registers.flags.ze = !(hold_word);
     cpu->registers.flags.ne = 1;
     cpu->registers.flags.hf = !((uint8_t) ((cpu->registers.a & 0xf) - ((val & 0xf) + cy)) > 0xf);
-    cpu->registers.flags.cy = !(holdWord > 0xff);
-    cpu->registers.a = holdWord;
+    cpu->registers.flags.cy = !(hold_word > 0xff);
+    cpu->registers.a = hold_word;
 }
 static inline void cpu_inst_xor(CPU* cpu, const uint8_t val) {
 	*cpu->regAddr[REG_A] ^= val;
@@ -199,13 +195,13 @@ int cpu_exec(CPU *cpu) {
 	
 	switch(op) 
 	{
-    // PREFIX CB
-    case 0xcb: 
-      addr_cb = ADDR_CB;
-      cycle_cpu   += CPU_CYCLE[op] + tmp_cycle_cpu;
-      cycle_bytes += tmp_cycle_bytes;
-      cpu_exec(cpu);
-      break;
+        // PREFIX CB
+        case 0xcb: 
+            addr_cb = ADDR_CB;
+            /*cycle_cpu   += CPU_CYCLE[op];
+            cycle_bytes += tmp_cycle_bytes;
+            cpu_exec(cpu);*/
+            break;
 
 		// NOP
 		case 0x00:
@@ -227,8 +223,10 @@ int cpu_exec(CPU *cpu) {
 
         // INC regs
         case 0x04: case 0x0c: case 0x14: case 0x1c: case 0x24: case 0x2c: case 0x3c:
-            holdSrc = (op & 0x38) >> 3;
-            *cpu->regAddr[holdSrc] = cpu_inst_inc(cpu, *cpu->regAddr[holdSrc]);
+        	{
+            	uint16_t hold_src = (op & 0x38) >> 3;
+            	*cpu->regAddr[hold_src] = cpu_inst_inc(cpu, *cpu->regAddr[hold_src]);
+            }
             break;
 		// DEC regs
 		case 0x05: case 0x0d: case 0x15: case 0x1d: case 0x25: case 0x2d: case 0x3d:
@@ -468,9 +466,11 @@ int cpu_exec(CPU *cpu) {
             break; // RRA
 
         case 0x08:
-            holdSrc = read_next_word(cpu);
-            mmu_wb(holdSrc, cpu->registers.sp & 0xff);
-            mmu_wb(holdSrc + 1, cpu->registers.sp >> 8);
+        	{
+            	uint16_t hold_src = read_next_word(cpu);
+            	mmu_wb(hold_src, cpu->registers.sp & 0xff);
+            	mmu_wb(hold_src + 1, cpu->registers.sp >> 8);
+            }
             break; // LD (nn), SP
         case 0x0a: cpu->registers.a = mmu_rb(cpu->registers.bc); break; // LD A, (BC)
         case 0x1a: cpu->registers.a = mmu_rb(cpu->registers.de); break; // LD A, (DE)
@@ -487,8 +487,10 @@ int cpu_exec(CPU *cpu) {
             mmu_wb(cpu->registers.hl--, cpu->registers.a);
 			break; // LD (HL-), A
         case 0x34:
-            holdSrc = cpu->registers.hl;
-            mmu_wb(holdSrc, cpu_inst_inc(cpu, mmu_rb(holdSrc)));
+        	{
+            	uint16_t hold_src = cpu->registers.hl;
+            	mmu_wb(hold_src, cpu_inst_inc(cpu, mmu_rb(hold_src)));
+            }
             break; // INC (HL)
         case 0x36:
             mmu_wb(cpu->registers.hl, read_next_byte(cpu));
@@ -532,23 +534,31 @@ int cpu_exec(CPU *cpu) {
         // PREFIX CB
         // RLC r
         case 0x100: case 0x101: case 0x102: case 0x103: case 0x104: case 0x105: case 0x107:
-            holdSrc = op;
-            *cpu->regAddr[holdSrc] = cpu_inst_rlc(cpu, *cpu->regAddr[holdSrc]);
+			{
+				uint16_t hold_src = op;
+            	*cpu->regAddr[hold_src] = cpu_inst_rlc(cpu, *cpu->regAddr[hold_src]);
+            }
             break;
         // RL r
         case 0x110: case 0x111: case 0x112: case 0x113: case 0x114: case 0x115: case 0x117:
-            holdSrc = op & 0x7;
-            *cpu->regAddr[holdSrc] = cpu_inst_rl(cpu, *cpu->regAddr[holdSrc]);
+        	{
+            	uint16_t hold_src = op & 0x7;
+            	*cpu->regAddr[hold_src] = cpu_inst_rl(cpu, *cpu->regAddr[hold_src]);
+            }
             break;
         // RRC r
         case 0x108: case 0x109: case 0x10a: case 0x10b: case 0x10c: case 0x10d: case 0x10f:
-            holdSrc = op & 0x7;
-            *cpu->regAddr[holdSrc] = cpu_inst_rrc(cpu, *cpu->regAddr[holdSrc]);
+        	{
+            	uint16_t hold_src = op & 0x7;
+            	*cpu->regAddr[hold_src] = cpu_inst_rrc(cpu, *cpu->regAddr[hold_src]);
+            }
             break;
         // RR r
         case 0x118: case 0x119: case 0x11a: case 0x11b: case 0x11c: case 0x11d: case 0x11f:
-            holdSrc = op & 0x7;
-            *cpu->regAddr[holdSrc] = cpu_inst_rr(cpu, *cpu->regAddr[holdSrc]);
+        	{
+            	uint16_t hold_src = op & 0x7;
+            	*cpu->regAddr[hold_src] = cpu_inst_rr(cpu, *cpu->regAddr[hold_src]);
+            }
             break;
         // BIT b, r 
 		case 0x140: case 0x141: case 0x142: case 0x143: case 0x144: case 0x145: case 0x147:
@@ -585,25 +595,32 @@ int cpu_exec(CPU *cpu) {
             break;
         // (HL) MMU
         case 0x106:
-            holdSrc = cpu->registers.hl;
-            mmu_wb(holdSrc, cpu_inst_rlc(cpu, mmu_rb(holdSrc)));
-            break;// rlc
+        	{
+            	uint16_t hold_src = cpu->registers.hl;
+            	mmu_wb(hold_src, cpu_inst_rlc(cpu, mmu_rb(hold_src)));
+            }
+            break; // rlc
         case 0x116:
-            holdSrc = cpu->registers.hl;
-            mmu_wb(holdSrc, cpu_inst_rl(cpu, mmu_rb(holdSrc)));
-            break;// rl
+        	{
+            	uint16_t hold_src = cpu->registers.hl;
+            	mmu_wb(hold_src, cpu_inst_rl(cpu, mmu_rb(hold_src)));
+            }
+            break; // rl
         case 0x10e:
-            holdSrc = cpu->registers.hl;
-            mmu_wb(holdSrc, cpu_inst_rrc(cpu, mmu_rb(holdSrc)));
-            break;// rrc
+        	{
+            	uint16_t hold_src = cpu->registers.hl;
+            	mmu_wb(hold_src, cpu_inst_rrc(cpu, mmu_rb(hold_src)));
+            }
+            break; // rrc
         case 0x11e:
-            holdSrc = cpu->registers.hl;
-            mmu_wb(holdSrc, cpu_inst_rr(cpu, mmu_rb(holdSrc)));
-            break;// rr
-
+        	{
+            	uint16_t hold_src = cpu->registers.hl;
+            	mmu_wb(hold_src, cpu_inst_rr(cpu, mmu_rb(hold_src)));
+            }
+            break; // rr
 
 		default:
-			printf("Opcode %02x not implemented!\n", op);
+			printf("CPU: Opcode %02x not implemented!\n", op);
 			halt = 1;
 			return -1;
 	}
@@ -615,8 +632,20 @@ int cpu_exec(CPU *cpu) {
     return 0; // no error
 }
 
-void cpu_regs_init(CPU *cpu) {
-
+void cpu_init(CPU *cpu) {
+	
+	cycle_bytes = 0;
+	cycle_cpu   = 0;
+	
+	cpu->registers.b = 0;
+	cpu->registers.c = 0;
+	cpu->registers.d = 0;
+	cpu->registers.e = 0;
+	cpu->registers.h = 0;
+	cpu->registers.l = 0;
+	cpu->registers.a = 0;
+	
+	// use advantage to per-register based instruction memory
 	cpu->regAddr[REG_B] = &cpu->registers.b;
 	cpu->regAddr[REG_C] = &cpu->registers.c;	
 	cpu->regAddr[REG_D] = &cpu->registers.d;

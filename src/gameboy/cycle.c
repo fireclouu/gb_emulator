@@ -1,9 +1,11 @@
 #include <stdio.h>
+#include "cycle.h"
 
 // NOTE: array with 0 value means function will provide cpu cycle since
 //       certain condition assigns its duration (except disabled op)
 const uint8_t CPU_CYCLE[256 * 2] = 
 {
+//  x0                                                                              0x
 //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
     4 ,  12,  8 ,  8 ,  4 ,  4 ,  8 ,  4 ,  20,  8 ,  8 ,  8 ,  4 ,  4 ,  8 ,  4 , // 0
     4 ,  12,  8 ,  8 ,  4 ,  4 ,  8 ,  4 ,  12,  8 ,  8 ,  8 ,  4 ,  4 ,  8 ,  4 , // 1
@@ -23,6 +25,7 @@ const uint8_t CPU_CYCLE[256 * 2] =
     12,  12,  8 ,  4 ,  00,  16,  8 ,  16,  12,  8 ,  16,  4 ,  00,  00,  8 ,  16, // F
 
 // PREFIX CB
+//  x0                                                                              0x
 //  0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F
     8 ,  8 ,  8 ,  8 ,  8 ,  8 ,  16,  8 ,  8 ,  8 ,  8 ,  8 ,  8 ,  8 ,  16,  8 , // 0 
     8 ,  8 ,  8 ,  8 ,  8 ,  8 ,  16,  8 ,  8 ,  8 ,  8 ,  8 ,  8 ,  8 ,  16,  8 , // 1 

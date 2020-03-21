@@ -72,10 +72,11 @@ typedef struct gb_cpu {
 // holder
 extern uint8_t tmp_cycle_bytes;
 extern uint8_t tmp_cycle_cpu;
+extern int addr_cb;
 
-// shared
-void cpu_regs_init(CPU*);
 int cpu_exec(CPU*);
+void cpu_init(CPU*);
 uint8_t mmu_rb(const uint16_t);
 void mmu_wb(const uint16_t, const uint8_t);
+
 #endif

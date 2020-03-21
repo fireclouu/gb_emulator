@@ -9,7 +9,7 @@ GBDIR = ./src/gameboy
 _DEPS = main.h cpu.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-_OBJ = main.o cpu.o gpu.o mmu.o
+_OBJ = main.o cpu.o cycle.o disassembler.o gpu.o mmu.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 _SRC = %.c
