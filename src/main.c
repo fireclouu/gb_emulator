@@ -3,8 +3,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include "cpu.h"
-#include "main.h"
 #include "disassembler.h"
+#include "main.h"
 
 #define USYSTIME tv.tv_sec*1000000+tv.tv_usec
 #define PRINT_LESS 0
@@ -67,22 +67,27 @@ void init() {
 }
 void printTrace(int type)
 {
+	// check if address is 0xCB
+	int op = (mmu_rb(cpu->registers.pc, 0) == 0xCB) ? 
+		mmu_rb(cpu->registers.pc + 1, 0) + ADDR_CB  :
+		mmu_rb(cpu->registers.pc, 0);
+		
     if (type == PRINT_LESS)
     {
         printf("%04x %s\n", cpu->registers.pc,
-                CPU_INST[mmu_rb(cpu->registers.pc) + addr_cb]);
+                CPU_INST[mmu_rb(op, 0)]);
     } else if (type == PRINT_FULL) {
         printf("PC: %04x (%03x) | SP: %04x | AF: %04x | BC: %04x | DE: %04x | HL: %04x ( %02x %02x %02x %02x ) %s\n",
                 // 16 bit registers
-                cpu->registers.pc, mmu_rb(cpu->registers.pc) + addr_cb, cpu->registers.sp,
+                cpu->registers.pc, op, cpu->registers.sp,
                 // register pairs
                 cpu->registers.af, cpu->registers.bc,
                 cpu->registers.de, cpu->registers.hl, 
                 // peek
-                mmu_rb(cpu->registers.pc),     mmu_rb(cpu->registers.pc + 1),
-                mmu_rb(cpu->registers.pc + 2), mmu_rb(cpu->registers.pc + 3),
+                mmu_rb(cpu->registers.pc,     0), mmu_rb(cpu->registers.pc + 1, 0),
+                mmu_rb(cpu->registers.pc + 2, 0), mmu_rb(cpu->registers.pc + 3, 0),
                 // instruction
-                CPU_INST[mmu_rb(cpu->registers.pc) + addr_cb]);
+                CPU_INST[op]);
     }
 }
 int main(/*int argc, char **args*/) {
@@ -100,7 +105,7 @@ int main(/*int argc, char **args*/) {
         // printtrace
         printTrace(PRINT_FULL);
         // cpu exec
-        cpu_exec(cpu);
+        cpu_step(cpu, 0);
     }
 
     printf("PROGRAM ENDED\n");

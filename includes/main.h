@@ -37,8 +37,4 @@ extern uint8_t *w_ram ;     // working ram (8k bytes)
 extern uint8_t *e_ram ;     // external ram (8k bytes)
 extern uint8_t *z_ram ;     // zero page ram (loc 0xffff - 0xff80)
 
-// cpu cycles
-extern size_t cycle_cpu;
-extern size_t cycle_bytes;
-
 #endif

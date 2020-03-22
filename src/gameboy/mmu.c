@@ -8,9 +8,9 @@
 bool mode_bios = true;
 
 // MMU read functions
-uint8_t mmu_rb(const uint16_t addr)
+uint8_t mmu_rb(const uint16_t addr, const uint8_t memcyc)
 {
-  tmp_cycle_bytes++; // byte cycle
+  cpu->clock.cur_mem += memcyc; // memory byte cycle
   
   switch(addr & 0xf000)
   {
@@ -90,6 +90,7 @@ uint8_t mmu_rb(const uint16_t addr)
   }
 }
 
+// DEPRECATED
 /*
 static inline uint16_t mmu_rw(const uint16_t addr)
 {
@@ -179,23 +180,3 @@ void mmu_wb(const uint16_t addr, const uint8_t data)
       }
     }
 }
-
-// old
-// MMU / Memory Management Unit / Memory Bus
-/*
-static inline uint8_t mmu_read_byte(const uint16_t addr) {
-    tmp_cycle_bytes++;
-    return memory[addr];
-}
-static inline void mmu_write_byte(const uint16_t addr, const uint8_t data) {
-    memory[addr] = data;
-}
-// unused
-static inline uint16_t mmu_read_word(const uint16_t addr) {
-    return memory[addr] | (memory[addr + 1] << 8);
-}
-static inline void mmu_write_word(const uint16_t addr, const uint16_t data) {
-    memory[addr] = data & 0xff;
-    memory[addr + 1] = data >> 8;
-}
-*/

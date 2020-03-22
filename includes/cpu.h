@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stdio.h>
+#define ADDR_CB 0x100
 
 // Custom Z80 cpu
 enum REG_ID {
@@ -14,6 +15,7 @@ enum REG_ID {
 
 typedef struct gb_cpu {
     // https://cturt.github.io/cinoop.html
+    uint8_t *regAddr[8];
     struct {
         struct {
             union {
@@ -30,7 +32,6 @@ typedef struct gb_cpu {
                 uint16_t af;
             };
         };
-
         struct {
             union {
                 struct {
@@ -40,7 +41,6 @@ typedef struct gb_cpu {
                 uint16_t bc;
             };
         };
-
         struct {
             union {
                 struct {
@@ -50,7 +50,6 @@ typedef struct gb_cpu {
                 uint16_t de;
             };
         };
-
         struct {
             union {
                 struct {
@@ -60,23 +59,21 @@ typedef struct gb_cpu {
                 uint16_t hl;
             };
         };
-
         uint16_t pc, sp;  // 16-bit register address
     } registers;
-
-	uint8_t *regAddr[8];
-  
-  bool sw_interrupt : 1;		// interrupt
+    
+    // clocks
+	struct {
+		uint8_t cur_cyc;
+		uint8_t cur_mem;
+		size_t mem, cyc;
+	} clock;
+	
 } CPU;
 
-// holder
-extern uint8_t tmp_cycle_bytes;
-extern uint8_t tmp_cycle_cpu;
-extern int addr_cb;
-
-int cpu_exec(CPU*);
+void cpu_step(CPU*, const int);
 void cpu_init(CPU*);
-uint8_t mmu_rb(const uint16_t);
+uint8_t mmu_rb(const uint16_t, const uint8_t);
 void mmu_wb(const uint16_t, const uint8_t);
 
 #endif

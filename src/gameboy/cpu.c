@@ -4,25 +4,14 @@
 #include "cycle.h"
 #include "main.h"
 
-#define ADDR_CB 0x100
-
-static inline void cpu_inst_push(CPU *a1, const uint16_t a2);
-
-// holders
-uint8_t tmp_cycle_bytes;
-uint8_t tmp_cycle_cpu;
-int addr_cb;
-
-// cycle
-size_t cycle_bytes;
-size_t cycle_cpu;
+static inline void cpu_inst_push(CPU*, const uint16_t);
 
 // d8/d16 reads
 static inline uint16_t read_next_word(CPU *cpu) {
-    return mmu_rb(cpu->registers.pc++) | (mmu_rb(cpu->registers.pc++) << 8);
+    return mmu_rb(cpu->registers.pc++, 1) | (mmu_rb(cpu->registers.pc++, 1) << 8);
 }
 static inline uint8_t read_next_byte(CPU *cpu) {
-	return mmu_rb(cpu->registers.pc++);
+	return mmu_rb(cpu->registers.pc++, 1);
 }
 
 // Instructions
@@ -32,7 +21,6 @@ static inline void cpu_inst_add(CPU* cpu, const uint8_t val, const bool cy) {
     cpu->registers.flags.ne = 0;
     cpu->registers.flags.hf = (uint8_t) ((val & 0xf) + (cpu->registers.a & 0xf) + cy) > 0xf;
     cpu->registers.flags.cy = hold_word > 0xff;
-
     cpu->registers.a = hold_word;
 }
 static inline void cpu_inst_add_hl(CPU* cpu, const uint16_t val) {
@@ -79,7 +67,7 @@ static inline void cpu_inst_or(CPU* cpu, const uint8_t val) {
     cpu->registers.flags.ne = cpu->registers.flags.hf = cpu->registers.flags.cy = 0;
 }
 static inline uint16_t cpu_inst_pop(CPU *cpu) {
-    return mmu_rb(cpu->registers.sp++) | (mmu_rb(cpu->registers.sp++) << 8);
+    return mmu_rb(cpu->registers.sp++, 1) | (mmu_rb(cpu->registers.sp++, 1) << 8);
 }
 static inline void cpu_inst_push(CPU *cpu, const uint16_t val) {
     mmu_wb(--cpu->registers.sp, val >> 8);
@@ -144,30 +132,30 @@ static inline void cpu_inst_cond_call(CPU* cpu, const bool cond, const uint16_t 
     if (cond) cpu_inst_call(cpu, addr);
 }
 static inline void cpu_inst_cond_jp_sign(CPU* cpu, const bool cond, const int8_t data) {
-    tmp_cycle_cpu = 8;
+    cpu->clock.cur_cyc = 8;
 
 	if (cond) 
     {
         cpu->registers.pc +=  data;
-        tmp_cycle_cpu = 12;
+        cpu->clock.cur_cyc = 12;
     }
 }
 static inline void cpu_inst_cond_jp_word(CPU *cpu, const bool cond, const uint16_t addr) {
-    tmp_cycle_cpu = 12;
+    cpu->clock.cur_cyc = 12;
 
     if (cond)
     {
         cpu->registers.pc = addr;
-        tmp_cycle_cpu = 16;
+        cpu->clock.cur_cyc = 16;
     }
 }
 static inline void cpu_inst_cond_ret(CPU* cpu, const bool cond) {
-    tmp_cycle_cpu = 8;
+    cpu->clock.cur_cyc = 8;
 
     if (cond)
     {
         cpu->registers.pc = cpu_inst_pop(cpu);
-        tmp_cycle_cpu = 20;
+        cpu->clock.cur_cyc = 20;
     }
 }
 
@@ -185,23 +173,21 @@ static inline void cpu_inst_set(uint8_t* reg, const uint8_t pos) {
     *reg = *reg | (1 << pos);
 }
 
-// return its cycle value
-int cpu_exec(CPU *cpu) {
-    // reset counters
-    tmp_cycle_bytes = tmp_cycle_cpu = 0;
-
-	uint16_t op = mmu_rb(cpu->registers.pc++) + addr_cb;
-    addr_cb = 0;
+void cpu_step(CPU *cpu, const int addr_cb) {
+    // reset last clock
+    cpu->clock.cur_cyc = 0;
+    cpu->clock.cur_mem = 0;
+    
+	uint16_t op = mmu_rb(cpu->registers.pc++, 1) + addr_cb;
 	
 	switch(op) 
 	{
         // PREFIX CB
-        case 0xcb: 
-            addr_cb = ADDR_CB;
-            /*cycle_cpu   += CPU_CYCLE[op];
-            cycle_bytes += tmp_cycle_bytes;
-            cpu_exec(cpu);*/
-            break;
+        case 0xcb:
+            cpu->clock.cyc += CPU_CYCLE[op] + cpu->clock.cur_cyc;
+            cpu->clock.mem += cpu->clock.cur_mem;
+            cpu_step(cpu, ADDR_CB); // Immediate execute
+            return;
 
 		// NOP
 		case 0x00:
@@ -209,7 +195,7 @@ int cpu_exec(CPU *cpu) {
 		// Disabled — should not modify anything in cpu
 		case 0xd3: case 0xdb: case 0xdd: case 0xe3: case 0xe4: case 0xeb: case 0xec:
 		case 0xed: case 0xf4: case 0xfc: case 0xfd:
-			return 0;
+			return;
 
 		// RST
 		case 0xc7: cpu_inst_rst(cpu, 0x00); break;
@@ -252,7 +238,7 @@ int cpu_exec(CPU *cpu) {
             break;
         // ADD (HL)/d8
         case 0x86:
-            cpu_inst_add(cpu, mmu_rb(cpu->registers.hl), 0);
+            cpu_inst_add(cpu, mmu_rb(cpu->registers.hl, 1), 0);
             break;
         case 0xc6:
             cpu_inst_add(cpu, read_next_byte(cpu), 0);
@@ -263,7 +249,7 @@ int cpu_exec(CPU *cpu) {
             break;
         // ADC (HL)
         case 0x8e:
-            cpu_inst_add(cpu, mmu_rb(cpu->registers.hl), cpu->registers.flags.cy);
+            cpu_inst_add(cpu, mmu_rb(cpu->registers.hl, 1), cpu->registers.flags.cy);
             break;
         // SUB regs
         case 0x90: case 0x91: case 0x92: case 0x93: case 0x94: case 0x95: case 0x97:
@@ -275,10 +261,10 @@ int cpu_exec(CPU *cpu) {
             break;
         // SUB/SBC (HL)
         case 0x96: 
-            cpu_inst_sub(cpu, mmu_rb(cpu->registers.hl), 0);
+            cpu_inst_sub(cpu, mmu_rb(cpu->registers.hl, 1), 0);
             break; // SUB (HL)
         case 0x9e:
-            cpu_inst_sub(cpu, mmu_rb(cpu->registers.hl), cpu->registers.flags.cy);
+            cpu_inst_sub(cpu, mmu_rb(cpu->registers.hl, 1), cpu->registers.flags.cy);
             break; // SBC (HL)
         // AND regs
         case 0xa0: case 0xa1: case 0xa2: case 0xa3: case 0xa4: case 0xa5: case 0xa7:
@@ -286,7 +272,7 @@ int cpu_exec(CPU *cpu) {
             break;
         // AND (HL)/d16
         case 0xa6:
-            cpu_inst_and(cpu, mmu_rb(cpu->registers.hl));
+            cpu_inst_and(cpu, mmu_rb(cpu->registers.hl, 1));
             break;
         case 0xe6:
             cpu_inst_and(cpu, read_next_byte(cpu));
@@ -296,14 +282,14 @@ int cpu_exec(CPU *cpu) {
 			cpu_inst_xor(cpu, *cpu->regAddr[op & 0x7]);
 			break;
         // XOR (HL)/d8
-        case 0xae: cpu_inst_xor(cpu, mmu_rb(cpu->registers.hl)); break;
+        case 0xae: cpu_inst_xor(cpu, mmu_rb(cpu->registers.hl, 1)); break;
         case 0xee: cpu_inst_xor(cpu, read_next_byte(cpu)); break;
         // OR regs
         case 0xb0: case 0xb1: case 0xb2: case 0xb3: case 0xb4: case 0xb5: case 0xb7:
             cpu_inst_or(cpu, *cpu->regAddr[op & 0x7]);
             break;
         // OR (HL)/d8
-        case 0xb6: cpu_inst_or(cpu, mmu_rb(cpu->registers.hl)); break;
+        case 0xb6: cpu_inst_or(cpu, mmu_rb(cpu->registers.hl, 1)); break;
         case 0xf6: cpu_inst_or(cpu, read_next_byte(cpu)); break;
         // CP regs
 		case 0xb8: case 0xb9: case 0xba: case 0xbb: case 0xbc: case 0xbd: case 0xbf:
@@ -428,7 +414,7 @@ int cpu_exec(CPU *cpu) {
         case 0xea: mmu_wb(read_next_word(cpu), cpu->registers.a);  break;
 		// LD r, hl
 		case 0x46: case 0x4e: case 0x56: case 0x5e: case 0x66: case 0x6e: case 0x7e:
-			*cpu->regAddr[(op & 0x38) >> 3] = mmu_rb(cpu->registers.hl);
+			*cpu->regAddr[(op & 0x38) >> 3] = mmu_rb(cpu->registers.hl, 1);
 			break;	
 		// LD hl, r
 		case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x77:
@@ -472,13 +458,13 @@ int cpu_exec(CPU *cpu) {
             	mmu_wb(hold_src + 1, cpu->registers.sp >> 8);
             }
             break; // LD (nn), SP
-        case 0x0a: cpu->registers.a = mmu_rb(cpu->registers.bc); break; // LD A, (BC)
-        case 0x1a: cpu->registers.a = mmu_rb(cpu->registers.de); break; // LD A, (DE)
+        case 0x0a: cpu->registers.a = mmu_rb(cpu->registers.bc, 1); break; // LD A, (BC)
+        case 0x1a: cpu->registers.a = mmu_rb(cpu->registers.de, 1); break; // LD A, (DE)
         case 0x22:
             mmu_wb(cpu->registers.hl++, cpu->registers.a);
             break; // LD (HL+), A
         case 0x2a:
-            cpu->registers.a = mmu_rb(cpu->registers.hl++);
+            cpu->registers.a = mmu_rb(cpu->registers.hl++, 1);
             break; // LD A, (HL+)
         case 0x31:
             cpu->registers.sp = read_next_word(cpu);
@@ -489,14 +475,14 @@ int cpu_exec(CPU *cpu) {
         case 0x34:
         	{
             	uint16_t hold_src = cpu->registers.hl;
-            	mmu_wb(hold_src, cpu_inst_inc(cpu, mmu_rb(hold_src)));
+            	mmu_wb(hold_src, cpu_inst_inc(cpu, mmu_rb(hold_src, 1)));
             }
             break; // INC (HL)
         case 0x36:
             mmu_wb(cpu->registers.hl, read_next_byte(cpu));
             break; // LD (HL), d8
         case 0x3a:
-            cpu->registers.a = mmu_rb(cpu->registers.hl--);
+            cpu->registers.a = mmu_rb(cpu->registers.hl--, 1);
             break; // LD A, (HL-)
         case 0xcd:
             cpu_inst_call(cpu, read_next_word(cpu));;
@@ -514,16 +500,16 @@ int cpu_exec(CPU *cpu) {
             cpu->registers.pc = cpu->registers.hl;
             break; // JP HL
 		case 0xf0:
-            cpu->registers.a = mmu_rb(0xff00 | read_next_byte(cpu));
+            cpu->registers.a = mmu_rb(0xff00 | read_next_byte(cpu), 1);
 			break; // LDH A, (a8)
         case 0xf2:
-            cpu->registers.a = mmu_rb(0xff00 | cpu->registers.c);
+            cpu->registers.a = mmu_rb(0xff00 | cpu->registers.c, 1);
             break; // LD A, (C)
         case 0xf9:
             cpu->registers.sp = cpu->registers.hl;
             break; // LD SP, HL
         case 0xfa:
-            cpu->registers.a = mmu_rb(read_next_word(cpu));
+            cpu->registers.a = mmu_rb(read_next_word(cpu), 1);
             break; // LD A, a16
 
         // INTERRUPTS
@@ -597,45 +583,45 @@ int cpu_exec(CPU *cpu) {
         case 0x106:
         	{
             	uint16_t hold_src = cpu->registers.hl;
-            	mmu_wb(hold_src, cpu_inst_rlc(cpu, mmu_rb(hold_src)));
+            	mmu_wb(hold_src, cpu_inst_rlc(cpu, mmu_rb(hold_src, 1)));
             }
             break; // rlc
         case 0x116:
         	{
             	uint16_t hold_src = cpu->registers.hl;
-            	mmu_wb(hold_src, cpu_inst_rl(cpu, mmu_rb(hold_src)));
+            	mmu_wb(hold_src, cpu_inst_rl(cpu, mmu_rb(hold_src, 1)));
             }
             break; // rl
         case 0x10e:
         	{
             	uint16_t hold_src = cpu->registers.hl;
-            	mmu_wb(hold_src, cpu_inst_rrc(cpu, mmu_rb(hold_src)));
+            	mmu_wb(hold_src, cpu_inst_rrc(cpu, mmu_rb(hold_src, 1)));
             }
             break; // rrc
         case 0x11e:
         	{
             	uint16_t hold_src = cpu->registers.hl;
-            	mmu_wb(hold_src, cpu_inst_rr(cpu, mmu_rb(hold_src)));
+            	mmu_wb(hold_src, cpu_inst_rr(cpu, mmu_rb(hold_src, 1)));
             }
             break; // rr
 
 		default:
 			printf("CPU: Opcode %02x not implemented!\n", op);
 			halt = 1;
-			return -1;
+			return;
 	}
 
     // calculate cycles
-    cycle_cpu   += CPU_CYCLE[op] + tmp_cycle_cpu;
-    cycle_bytes += tmp_cycle_bytes;
-
-    return 0; // no error
+    cpu->clock.cyc += CPU_CYCLE[op] + cpu->clock.cur_cyc;
+    cpu->clock.mem += cpu->clock.cur_mem;
 }
 
 void cpu_init(CPU *cpu) {
 	
-	cycle_bytes = 0;
-	cycle_cpu   = 0;
+	cpu->clock.cur_cyc = 0;
+	cpu->clock.cur_mem = 0;
+	cpu->clock.cyc     = 0;
+	cpu->clock.mem     = 0;
 	
 	cpu->registers.b = 0;
 	cpu->registers.c = 0;
@@ -661,7 +647,6 @@ void cpu_init(CPU *cpu) {
 	cpu->registers.flags.ne = 0;
 	cpu->registers.flags.hf = 0;
 	cpu->registers.flags.cy = 0;
-	
 }
 
 // Project started: 16/02/2020
