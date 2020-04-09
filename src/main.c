@@ -4,6 +4,7 @@
 #include <time.h>
 #include "cpu.h"
 #include "disassembler.h"
+#include "display.c"
 #include "main.h"
 
 #define USYSTIME tv.tv_sec*1000000+tv.tv_usec
@@ -26,11 +27,11 @@ uint8_t *z_ram;
 size_t timer;
 
 void loadfile(const char *filename, uint8_t *memptr,
-        int bufstart, int bufend) 
+        int bufstart, int bufend)
 {
     FILE *fp = fopen(filename, "rb");
 
-    if (fp == NULL) 
+    if (fp == NULL)
     {
         printf("HOST: File \"%s\" not found.\n", filename);
         exit(1);
@@ -68,10 +69,10 @@ void init() {
 void printTrace(int type)
 {
 	// check if address is 0xCB
-	int op = (mmu_rb(cpu->registers.pc, 0) == 0xCB) ? 
+	int op = (mmu_rb(cpu->registers.pc, 0) == 0xCB) ?
 		mmu_rb(cpu->registers.pc + 1, 0) + ADDR_CB  :
 		mmu_rb(cpu->registers.pc, 0);
-		
+
     if (type == PRINT_LESS)
     {
         printf("%04x %s\n", cpu->registers.pc,
@@ -82,7 +83,7 @@ void printTrace(int type)
                 cpu->registers.pc, op, cpu->registers.sp,
                 // register pairs
                 cpu->registers.af, cpu->registers.bc,
-                cpu->registers.de, cpu->registers.hl, 
+                cpu->registers.de, cpu->registers.hl,
                 // peek
                 mmu_rb(cpu->registers.pc,     0), mmu_rb(cpu->registers.pc + 1, 0),
                 mmu_rb(cpu->registers.pc + 2, 0), mmu_rb(cpu->registers.pc + 3, 0),
@@ -96,7 +97,9 @@ int main(/*int argc, char **args*/) {
     init();
     loadfile("roms/bios.bin", m_bios, MEM_REGION_BIOS, MEM_REGION_END_BIOS);
     loadfile("roms/tetris.gb", m_rom, MEM_REGION_ROM,  MEM_REGION_END_ROM);
-
+    display_init();
+    display_test();
+    display_close();
     while(!halt)
     {
         // timing

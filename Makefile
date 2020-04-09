@@ -1,15 +1,15 @@
 CC = gcc
-CFLAGS = -Wall -Wextra -O2 -I$(IDIR)
+CFLAGS = -Wall -Wextra -O2 -I$(IDIR) -lSDL2
 
 ODIR = ./obj
 IDIR = ./includes
 SDIR = ./src
 GBDIR = ./src/gameboy
 
-_DEPS = main.h cpu.h
+_DEPS = display.h main.h cpu.h
 DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
-_OBJ = main.o cpu.o cycle.o disassembler.o gpu.o mmu.o
+_OBJ = main.o cpu.o cycle.o disassembler.o display.o gpu.o mmu.o
 OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
 
 _SRC = %.c

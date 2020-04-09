@@ -2,7 +2,6 @@
 #define MAIN_H
 
 #include <stdbool.h>
-#include <stdio.h>
 #include "cpu.h"
 
 #define MEM_REGION_BIOS       0x0000

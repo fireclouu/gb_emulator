@@ -125,7 +125,7 @@ static inline void cpu_inst_sub(CPU* cpu, const uint8_t val, const bool cy) {
 static inline void cpu_inst_xor(CPU* cpu, const uint8_t val) {
 	*cpu->regAddr[REG_A] ^= val;
 	cpu->registers.flags.ze = !(*cpu->regAddr[REG_A]);
-	cpu->registers.flags.ne = cpu->registers.flags.hf = cpu->registers.flags.cy = 0; 
+	cpu->registers.flags.ne = cpu->registers.flags.hf = cpu->registers.flags.cy = 0;
 }
 // conditional jumps
 static inline void cpu_inst_cond_call(CPU* cpu, const bool cond, const uint16_t addr) {
@@ -134,7 +134,7 @@ static inline void cpu_inst_cond_call(CPU* cpu, const bool cond, const uint16_t 
 static inline void cpu_inst_cond_jp_sign(CPU* cpu, const bool cond, const int8_t data) {
     cpu->clock.cur_cyc = 8;
 
-	if (cond) 
+	if (cond)
     {
         cpu->registers.pc +=  data;
         cpu->clock.cur_cyc = 12;
@@ -177,10 +177,10 @@ void cpu_step(CPU *cpu, const int addr_cb) {
     // reset last clock
     cpu->clock.cur_cyc = 0;
     cpu->clock.cur_mem = 0;
-    
+
 	uint16_t op = mmu_rb(cpu->registers.pc++, 1) + addr_cb;
-	
-	switch(op) 
+
+	switch(op)
 	{
         // PREFIX CB
         case 0xcb:
@@ -260,7 +260,7 @@ void cpu_step(CPU *cpu, const int addr_cb) {
             cpu_inst_sub(cpu, *cpu->regAddr[op & 0x7], cpu->registers.flags.cy);
             break;
         // SUB/SBC (HL)
-        case 0x96: 
+        case 0x96:
             cpu_inst_sub(cpu, mmu_rb(cpu->registers.hl, 1), 0);
             break; // SUB (HL)
         case 0x9e:
@@ -314,61 +314,61 @@ void cpu_step(CPU *cpu, const int addr_cb) {
             break; // NZ
         case 0x28:
             cpu_inst_cond_jp_sign
-                (cpu, cpu->registers.flags.ze, 
+                (cpu, cpu->registers.flags.ze,
                 (int8_t) read_next_byte(cpu));
             break; // Z
         case 0x30:
             cpu_inst_cond_jp_sign
-                (cpu, !cpu->registers.flags.cy, 
+                (cpu, !cpu->registers.flags.cy,
                 (int8_t) read_next_byte(cpu));
             break; // NC
         case 0x38:
             cpu_inst_cond_jp_sign
-                (cpu, cpu->registers.flags.cy, 
+                (cpu, cpu->registers.flags.cy,
                 (int8_t) read_next_byte(cpu));
             break; // C
 
         // Conditional JP d16
-        case 0xc2: 
+        case 0xc2:
             cpu_inst_cond_jp_word
                 (cpu, !cpu->registers.flags.ze,
                 read_next_word(cpu));
             break;
-        case 0xca: 
+        case 0xca:
             cpu_inst_cond_jp_word
-                (cpu, cpu->registers.flags.ze, 
+                (cpu, cpu->registers.flags.ze,
                 read_next_word(cpu));
             break;
-        case 0xd2: 
+        case 0xd2:
             cpu_inst_cond_jp_word
                 (cpu, !cpu->registers.flags.cy,
                 read_next_word(cpu));
             break;
-        case 0xda: 
+        case 0xda:
             cpu_inst_cond_jp_word
                 (cpu, cpu->registers.flags.cy,
                 read_next_word(cpu));
             break;
-        
+
         // Conditional CALL
         case 0xc4:
             cpu_inst_cond_call
-                (cpu, !(cpu->registers.flags.ze), 
+                (cpu, !(cpu->registers.flags.ze),
                 read_next_word(cpu));
             break;
         case 0xcc:
             cpu_inst_cond_call
-                (cpu, (cpu->registers.flags.ze), 
+                (cpu, (cpu->registers.flags.ze),
                 read_next_word(cpu));
             break;
         case 0xd4:
             cpu_inst_cond_call
-                (cpu, !(cpu->registers.flags.cy), 
+                (cpu, !(cpu->registers.flags.cy),
                 read_next_word(cpu));
             break;
         case 0xdc:
             cpu_inst_cond_call
-                (cpu, (cpu->registers.flags.cy), 
+                (cpu, (cpu->registers.flags.cy),
                 read_next_word(cpu));
             break;
 
@@ -394,14 +394,14 @@ void cpu_step(CPU *cpu, const int addr_cb) {
             cpu_inst_cond_jp_sign
                 (cpu, true, read_next_byte(cpu));
             break; // JR r8
-		case 0xc3: 
-            cpu->registers.pc = read_next_word(cpu); 
+		case 0xc3:
+            cpu->registers.pc = read_next_word(cpu);
             break; // JP d16
 
         // Pairs
         // DEC rp
         case 0x0b: cpu->registers.bc--; break;
-        case 0x1b: cpu->registers.de--; break;           
+        case 0x1b: cpu->registers.de--; break;
         case 0x2b: cpu->registers.hl--; break;
         case 0x3b: cpu->registers.sp--; break;
 		// LD RP, d16
@@ -415,7 +415,7 @@ void cpu_step(CPU *cpu, const int addr_cb) {
 		// LD r, hl
 		case 0x46: case 0x4e: case 0x56: case 0x5e: case 0x66: case 0x6e: case 0x7e:
 			*cpu->regAddr[(op & 0x38) >> 3] = mmu_rb(cpu->registers.hl, 1);
-			break;	
+			break;
 		// LD hl, r
 		case 0x70: case 0x71: case 0x72: case 0x73: case 0x74: case 0x75: case 0x77:
             mmu_wb(cpu->registers.hl, *cpu->regAddr[op & 0x7]);
@@ -441,10 +441,10 @@ void cpu_step(CPU *cpu, const int addr_cb) {
         case 0x07:
             cpu->registers.a = cpu_inst_rlc(cpu, cpu->registers.a);
             break; // RLCA
-        case 0x0f: 
+        case 0x0f:
             cpu->registers.a = cpu_inst_rrc(cpu, cpu->registers.a);
             break; // RRCA
-        case 0x17: 
+        case 0x17:
             cpu->registers.a = cpu_inst_rl(cpu, cpu->registers.a);
             break; // RLA
         case 0x1f:
@@ -546,7 +546,7 @@ void cpu_step(CPU *cpu, const int addr_cb) {
             	*cpu->regAddr[hold_src] = cpu_inst_rr(cpu, *cpu->regAddr[hold_src]);
             }
             break;
-        // BIT b, r 
+        // BIT b, r
 		case 0x140: case 0x141: case 0x142: case 0x143: case 0x144: case 0x145: case 0x147:
 		case 0x148: case 0x149: case 0x14a: case 0x14b: case 0x14c: case 0x14d: case 0x14f:
 		case 0x150: case 0x151: case 0x152: case 0x153: case 0x154: case 0x155: case 0x157:
@@ -557,7 +557,7 @@ void cpu_step(CPU *cpu, const int addr_cb) {
 		case 0x178: case 0x179: case 0x17a: case 0x17b: case 0x17c: case 0x17d: case 0x17f:
             cpu_inst_bit(cpu, *cpu->regAddr[op & 0x7], (op & 0x38) >> 3);
             break;
-        // RES b, r 
+        // RES b, r
 		case 0x180: case 0x181: case 0x182: case 0x183: case 0x184: case 0x185: case 0x187:
 		case 0x188: case 0x189: case 0x18a: case 0x18b: case 0x18c: case 0x18d: case 0x18f:
 		case 0x190: case 0x191: case 0x192: case 0x193: case 0x194: case 0x195: case 0x197:
@@ -617,12 +617,12 @@ void cpu_step(CPU *cpu, const int addr_cb) {
 }
 
 void cpu_init(CPU *cpu) {
-	
+
 	cpu->clock.cur_cyc = 0;
 	cpu->clock.cur_mem = 0;
 	cpu->clock.cyc     = 0;
 	cpu->clock.mem     = 0;
-	
+
 	cpu->registers.b = 0;
 	cpu->registers.c = 0;
 	cpu->registers.d = 0;
@@ -630,10 +630,10 @@ void cpu_init(CPU *cpu) {
 	cpu->registers.h = 0;
 	cpu->registers.l = 0;
 	cpu->registers.a = 0;
-	
+
 	// use advantage to per-register based instruction memory
 	cpu->regAddr[REG_B] = &cpu->registers.b;
-	cpu->regAddr[REG_C] = &cpu->registers.c;	
+	cpu->regAddr[REG_C] = &cpu->registers.c;
 	cpu->regAddr[REG_D] = &cpu->registers.d;
 	cpu->regAddr[REG_E] = &cpu->registers.e;
 	cpu->regAddr[REG_H] = &cpu->registers.h;

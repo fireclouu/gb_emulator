@@ -22,10 +22,10 @@ typedef struct gb_cpu {
                 struct {
                     struct {
                         uint8_t filler : 4;
-                        uint8_t cy : 1;
-                        uint8_t hf : 1;
-                        uint8_t ne : 1; 
-                        uint8_t ze : 1; // flags, pos: znhc0000 (as reg. F / psw)	
+                        bool cy : 1;
+                        bool hf : 1;
+                        bool ne : 1;
+                        bool ze : 1; // flags, pos: znhc0000 (as reg. F / psw)
                     } flags;
                     uint8_t a;
                 };
@@ -61,14 +61,14 @@ typedef struct gb_cpu {
         };
         uint16_t pc, sp;  // 16-bit register address
     } registers;
-    
+
     // clocks
 	struct {
 		uint8_t cur_cyc;
 		uint8_t cur_mem;
 		size_t mem, cyc;
 	} clock;
-	
+
 } CPU;
 
 void cpu_step(CPU*, const int);
